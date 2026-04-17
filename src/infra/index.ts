@@ -3,6 +3,7 @@ export { CryptoService } from './crypto.js';
 export { configService, ConfigService } from './config.js';
 export { UserCancelledError, isPromptAbortError, isUserCancelledError, getErrorMessage } from './errors.js';
 export { prompt } from './prompts.js';
+export { selectPrompt } from './select.js';
 export { ui } from './ui.js';
 export {
   ISSUE_MATCH_PROMPT,

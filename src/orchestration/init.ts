@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import type { AppConfig } from '../types/index.js';
 import type { UserProficiency } from '../types/config.types.js';
 import { githubService, llmService } from '../services/index.js';
-import { configService, prompt, ui } from '../infra/index.js';
+import { configService, prompt, selectPrompt, ui } from '../infra/index.js';
 
 interface LLMProviderOption {
   name: string;
@@ -126,36 +126,29 @@ export class InitOrchestrator {
     let llmValid = false;
 
     while (!llmValid) {
-      const providerAnswer = await prompt<{ providerValue: string }>([
-        {
-          type: 'list',
-          name: 'providerValue',
-          message: 'Select LLM provider:',
-          choices: LLM_PROVIDERS.map(provider => ({
-            name: provider.name,
-            value: provider.value,
-          })),
-        },
-      ]);
-      providerValue = providerAnswer.providerValue;
+      providerValue = await selectPrompt<string>({
+        message: 'Select LLM provider:',
+        default: config.llm.provider,
+        choices: LLM_PROVIDERS.map(provider => ({
+          name: provider.name,
+          value: provider.value,
+          description: provider.baseUrl,
+        })),
+      });
 
       selectedProvider = LLM_PROVIDERS.find(p => p.value === providerValue);
       if (!selectedProvider) {
         throw new Error(`Provider not found: ${providerValue}`);
       }
 
-      const modelAnswer = await prompt<{ modelValue: string }>([
-        {
-          type: 'list',
-          name: 'modelValue',
-          message: 'Select model:',
-          choices: selectedProvider.models.map(model => ({
-            name: model.name,
-            value: model.value,
-          })),
-        },
-      ]);
-      modelValue = modelAnswer.modelValue;
+      modelValue = await selectPrompt<string>({
+        message: 'Select model:',
+        default: config.llm.modelName,
+        choices: selectedProvider.models.map(model => ({
+          name: model.name,
+          value: model.value,
+        })),
+      });
 
       apiKey = await this.promptAPIKey();
 
