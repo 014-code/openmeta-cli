@@ -191,10 +191,7 @@ export class AgentOrchestrator {
     ui.section('Ranked issues', `Showing the top ${Math.min(limit, rankedIssues.length)} opportunities.`);
 
     for (const [index, issue] of rankedIssues.slice(0, limit).entries()) {
-      console.log(`\n  ${chalk.bold(`${index + 1}.`)} ${chalk.white(issue.repoFullName)}${chalk.gray('#')}${chalk.white(issue.number)}`);
-      console.log(`     ${chalk.gray('Title:')} ${chalk.white(issue.title)}`);
-      console.log(`     ${chalk.gray('Overall:')} ${chalk.green(issue.opportunity.overallScore.toString())}  ${chalk.gray('Match:')} ${issue.matchScore}  ${chalk.gray('Opportunity:')} ${issue.opportunity.score}`);
-      console.log(`     ${chalk.gray('Summary:')} ${chalk.gray(issue.opportunity.summary)}`);
+      this.printIssuePreview(issue, index + 1);
     }
   }
 
@@ -275,14 +272,11 @@ export class AgentOrchestrator {
   }
 
   private async promptForIssue(issues: RankedIssue[]): Promise<RankedIssue> {
-    ui.section('Review opportunities', `Showing the top ${Math.min(10, issues.length)} ranked issues.`);
-    const topIssues = issues.slice(0, 10);
+    ui.section('Review opportunities', `Showing the top ${Math.min(5, issues.length)} ranked issues with detailed context.`);
+    const topIssues = issues.slice(0, 5);
 
     for (const [index, issue] of topIssues.entries()) {
-      console.log(`\n  ${chalk.bold(`${index + 1}.`)} ${chalk.white(issue.repoFullName)}${chalk.gray('#')}${chalk.white(issue.number)}`);
-      console.log(`     ${chalk.gray('Title:')} ${chalk.white(issue.title)}`);
-      console.log(`     ${chalk.gray('Overall:')} ${chalk.green(issue.opportunity.overallScore.toString())}  ${chalk.gray('Match:')} ${issue.matchScore}  ${chalk.gray('Opportunity:')} ${issue.opportunity.score}`);
-      console.log(`     ${chalk.gray('Summary:')} ${chalk.gray(issue.opportunity.summary)}`);
+      this.printIssuePreview(issue, index + 1);
     }
 
     try {
@@ -333,6 +327,26 @@ export class AgentOrchestrator {
         tone: 'warning',
       });
     }
+  }
+
+  private printIssuePreview(issue: RankedIssue, index: number): void {
+    const bodyExcerpt = issue.body.replace(/\s+/g, ' ').trim().slice(0, 180);
+
+    console.log(`\n  ${chalk.bold(`${index}.`)} ${chalk.white(issue.repoFullName)}${chalk.gray('#')}${chalk.white(issue.number)}`);
+    console.log(`     ${chalk.gray('Title:')} ${chalk.white(issue.title)}`);
+    console.log(`     ${chalk.gray('Link:')} ${chalk.cyan(issue.htmlUrl)}`);
+    console.log(`     ${chalk.gray('Repo:')} ${chalk.gray(issue.repoDescription || 'n/a')}`);
+    console.log(`     ${chalk.gray('Stars:')} ${chalk.white(issue.repoStars.toString())}  ${chalk.gray('Updated:')} ${chalk.white(issue.updatedAt.slice(0, 10))}  ${chalk.gray('Created:')} ${chalk.white(issue.createdAt.slice(0, 10))}`);
+    console.log(`     ${chalk.gray('Labels:')} ${chalk.cyan(issue.labels.join(', ') || 'none')}`);
+    console.log(`     ${chalk.gray('Demand:')} ${chalk.white(issue.analysis.coreDemand || 'n/a')}`);
+    console.log(`     ${chalk.gray('Tech:')} ${chalk.cyan(issue.analysis.techRequirements.join(', ') || 'n/a')}`);
+    console.log(`     ${chalk.gray('Workload:')} ${chalk.white(issue.analysis.estimatedWorkload || 'n/a')}`);
+    if (bodyExcerpt) {
+      console.log(`     ${chalk.gray('Issue:')} ${chalk.gray(bodyExcerpt)}`);
+    }
+    console.log(`     ${chalk.gray('Overall:')} ${chalk.green(issue.opportunity.overallScore.toString())}  ${chalk.gray('Match:')} ${issue.matchScore}  ${chalk.gray('Opportunity:')} ${issue.opportunity.score}`);
+    console.log(`     ${chalk.gray('Breakdown:')} ${chalk.gray(`freshness ${issue.opportunity.breakdown.freshness}, clarity ${issue.opportunity.breakdown.onboardingClarity}, merge ${issue.opportunity.breakdown.mergePotential}, impact ${issue.opportunity.breakdown.impact}`)}`);
+    console.log(`     ${chalk.gray('Summary:')} ${chalk.gray(issue.opportunity.summary)}`);
   }
 
   private prepareLocalArtifactPaths(issue: RankedIssue) {
