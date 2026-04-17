@@ -1,5 +1,8 @@
+export type UserProficiency = 'beginner' | 'intermediate' | 'advanced';
+
 export interface UserProfile {
   techStack: string[];
+  proficiency: UserProficiency;
   focusAreas: string[];
 }
 

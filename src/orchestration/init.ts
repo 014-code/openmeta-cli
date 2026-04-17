@@ -1,9 +1,9 @@
 import inquirer from 'inquirer';
-import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { AppConfig } from '../types/index.js';
+import type { UserProficiency } from '../types/config.types.js';
 import { githubService, llmService } from '../services/index.js';
-import { configService, logger } from '../infra/index.js';
+import { configService } from '../infra/index.js';
 
 interface LLMProviderOption {
   name: string;
@@ -67,6 +67,36 @@ const LLM_PROVIDERS: LLMProviderOption[] = [
   },
 ];
 
+const TECH_STACK_CHOICES = [
+  'TypeScript',
+  'JavaScript',
+  'Node.js',
+  'React',
+  'Vue',
+  'Python',
+  'Django',
+  'FastAPI',
+  'Go',
+  'Rust',
+  'Java',
+  'Spring Boot',
+  'C++',
+  'Swift',
+  'Kotlin',
+  'Docker',
+];
+
+const FOCUS_AREA_CHOICES = [
+  { name: 'Web Development', value: 'web-dev' },
+  { name: 'Backend / API', value: 'backend' },
+  { name: 'DevOps / Infrastructure', value: 'devops' },
+  { name: 'AI / Machine Learning', value: 'ai-ml' },
+  { name: 'Mobile Development', value: 'mobile' },
+  { name: 'Security', value: 'security' },
+  { name: 'Data Engineering', value: 'data' },
+  { name: 'Open Source', value: 'open-source' },
+];
+
 export class InitOrchestrator {
   async execute(): Promise<void> {
     console.log(BANNER);
@@ -116,33 +146,39 @@ export class InitOrchestrator {
     let llmValid = false;
 
     while (!llmValid) {
-      // Step 2a: Select provider
-      providerValue = await select({
-        message: '  Select LLM provider:',
-        choices: LLM_PROVIDERS.map(p => ({
-          name: p.name,
-          value: p.value,
-        })),
-      });
+      const providerAnswer = await inquirer.prompt<{ providerValue: string }>([
+        {
+          type: 'list',
+          name: 'providerValue',
+          message: '  Select LLM provider:',
+          choices: LLM_PROVIDERS.map(provider => ({
+            name: provider.name,
+            value: provider.value,
+          })),
+        },
+      ]);
+      providerValue = providerAnswer.providerValue;
 
       selectedProvider = LLM_PROVIDERS.find(p => p.value === providerValue);
       if (!selectedProvider) {
         throw new Error(`Provider not found: ${providerValue}`);
       }
 
-      // Step 2b: Select model
-      modelValue = await select({
-        message: '  Select model:',
-        choices: selectedProvider.models.map(m => ({
-          name: m.name,
-          value: m.value,
-        })),
-      });
+      const modelAnswer = await inquirer.prompt<{ modelValue: string }>([
+        {
+          type: 'list',
+          name: 'modelValue',
+          message: '  Select model:',
+          choices: selectedProvider.models.map(model => ({
+            name: model.name,
+            value: model.value,
+          })),
+        },
+      ]);
+      modelValue = modelAnswer.modelValue;
 
-      // Step 2c: Enter API key
       apiKey = await this.promptAPIKey();
 
-      // Step 2d: Validate connection
       llmService.initialize(apiKey, selectedProvider.baseUrl, modelValue);
       llmValid = await llmService.validateConnection();
 
@@ -166,33 +202,44 @@ export class InitOrchestrator {
 
     console.log(STEP_DIVIDER('STEP 3  ·  User Profile'));
 
-    const techStack = await select({
-      message: '  Select your tech stack:',
-      choices: [
-        { name: 'TypeScript, React, Node.js', value: 'TypeScript,React,Node.js' },
-        { name: 'Python, Django, FastAPI', value: 'Python,Django,FastAPI' },
-        { name: 'Go, Gin, Echo', value: 'Go,Gin,Echo' },
-        { name: 'Rust, Actix, Tokio', value: 'Rust,Actix,Tokio' },
-        { name: 'Java, Spring Boot', value: 'Java,Spring Boot' },
-        { name: 'C++, CMake', value: 'C++,CMake' },
-        { name: 'Swift, SwiftUI', value: 'Swift,SwiftUI' },
-        { name: 'Kotlin, Jetpack Compose', value: 'Kotlin,Jetpack Compose' },
-      ],
-    });
-
-    const focusAreas = await select({
-      message: '  Select your focus areas:',
-      choices: [
-        { name: 'Web Development', value: 'web-dev' },
-        { name: 'Backend / API', value: 'backend' },
-        { name: 'DevOps / Infrastructure', value: 'devops' },
-        { name: 'AI / Machine Learning', value: 'ai-ml' },
-        { name: 'Mobile Development', value: 'mobile' },
-        { name: 'Security', value: 'security' },
-        { name: 'Data Engineering', value: 'data' },
-        { name: 'Open Source', value: 'open-source' },
-      ],
-    });
+    const { techStack, proficiency, focusAreas } = await inquirer.prompt<{
+      techStack: string[];
+      proficiency: UserProficiency;
+      focusAreas: string[];
+    }>([
+      {
+        type: 'checkbox',
+        name: 'techStack',
+        message: '  Select your tech stack:',
+        choices: TECH_STACK_CHOICES.map(tech => ({
+          name: tech,
+          value: tech,
+          checked: config.userProfile.techStack.includes(tech),
+        })),
+        validate: (input) => input.length > 0 || 'Select at least one technology',
+      },
+      {
+        type: 'list',
+        name: 'proficiency',
+        message: '  Select your current proficiency level:',
+        default: config.userProfile.proficiency,
+        choices: [
+          { name: 'Beginner', value: 'beginner' },
+          { name: 'Intermediate', value: 'intermediate' },
+          { name: 'Advanced', value: 'advanced' },
+        ],
+      },
+      {
+        type: 'checkbox',
+        name: 'focusAreas',
+        message: '  Select your focus areas:',
+        choices: FOCUS_AREA_CHOICES.map(area => ({
+          ...area,
+          checked: config.userProfile.focusAreas.includes(area.value),
+        })),
+        validate: (input) => input.length > 0 || 'Select at least one focus area',
+      },
+    ]);
 
     console.log(STEP_DIVIDER('STEP 4  ·  Target Repository (Optional)'));
 
@@ -201,15 +248,16 @@ export class InitOrchestrator {
         type: 'input',
         name: 'targetRepoPath',
         message: '  Enter path to your private repository (optional):',
-        default: '',
+        default: config.github.targetRepoPath || '',
       },
     ]);
 
     const newConfig: AppConfig = {
       ...config,
       userProfile: {
-        techStack: techStack.split(',').map(s => s.trim()).filter(Boolean),
-        focusAreas: focusAreas.split(',').map(s => s.trim()).filter(Boolean),
+        techStack,
+        proficiency,
+        focusAreas,
       },
       github: {
         pat,

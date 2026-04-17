@@ -11,6 +11,7 @@ export class ConfigOrchestrator {
 
     console.log('User Profile:');
     console.log(`  Tech Stack: ${config.userProfile.techStack.join(', ') || '(not set)'}`);
+    console.log(`  Proficiency: ${config.userProfile.proficiency || '(not set)'}`);
     console.log(`  Focus Areas: ${config.userProfile.focusAreas.join(', ') || '(not set)'}`);
 
     console.log('\nGitHub:');
@@ -19,6 +20,7 @@ export class ConfigOrchestrator {
     console.log(`  Target Repo: ${config.github.targetRepoPath || '(not set)'}`);
 
     console.log('\nLLM:');
+    console.log(`  Provider: ${config.llm.provider}`);
     console.log(`  Base URL: ${config.llm.apiBaseUrl}`);
     console.log(`  Model: ${config.llm.modelName}`);
     console.log(`  API Key: ${config.llm.apiKey ? '***' + config.llm.apiKey.slice(-4) : '(not set)'}`);
