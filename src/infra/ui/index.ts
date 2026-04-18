@@ -1,6 +1,9 @@
+import boxen from 'boxen';
 import chalk from 'chalk';
+import figures from 'figures';
+import gradient from 'gradient-string';
 import { getUiCapabilities } from './capabilities.js';
-import { padLine, visibleLength, wrapLine, wrapLines } from './layout.js';
+import { padLine, visibleLength, wrapLine } from './layout.js';
 import { runTask } from './live.js';
 import type {
   CardOptions,
@@ -15,119 +18,88 @@ import type {
   UiCapabilities,
 } from './types.js';
 
-type CardVariant = 'standard' | 'hero' | 'celebration';
+type CardVariant = 'standard' | 'callout';
 
-interface BoxChars {
-  topLeft: string;
-  topRight: string;
-  bottomLeft: string;
-  bottomRight: string;
-  horizontal: string;
-  vertical: string;
+interface TonePalette {
+  accent: typeof chalk.cyanBright;
+  muted: typeof chalk.gray;
+  borderColor: string;
+  gradient: (text: string) => string;
 }
 
-function boxChars(capabilities: UiCapabilities, variant: CardVariant = 'standard'): BoxChars {
-  if (capabilities.supportsUnicode) {
-    if (variant !== 'standard') {
+const brandGradient = gradient(['#4fd1ff', '#50f5c8', '#ffe072']);
+const successGradient = gradient(['#4ae38b', '#79f7b1', '#d5ff7d']);
+const warningGradient = gradient(['#ffb86b', '#ffd56b', '#fff0a1']);
+const errorGradient = gradient(['#ff6b7a', '#ff8b8b', '#ffc2ad']);
+const accentGradient = gradient(['#62d4ff', '#7cf7f2', '#c6fca9']);
+
+function applyGradient(capabilities: UiCapabilities, painter: (text: string) => string, text: string): string {
+  return capabilities.supportsColor ? painter(text) : text;
+}
+
+function paletteForTone(tone: Tone): TonePalette {
+  switch (tone) {
+    case 'success':
       return {
-        topLeft: '╔',
-        topRight: '╗',
-        bottomLeft: '╚',
-        bottomRight: '╝',
-        horizontal: '═',
-        vertical: '║',
+        accent: chalk.greenBright,
+        muted: chalk.green,
+        borderColor: 'green',
+        gradient: successGradient,
       };
-    }
-
-    return {
-      topLeft: '┌',
-      topRight: '┐',
-      bottomLeft: '└',
-      bottomRight: '┘',
-      horizontal: '─',
-      vertical: '│',
-    };
-  }
-
-  return {
-    topLeft: '+',
-    topRight: '+',
-    bottomLeft: '+',
-    bottomRight: '+',
-    horizontal: '-',
-    vertical: '|',
-  };
-}
-
-function toneColor(tone: Tone): (text: string) => string {
-  switch (tone) {
-    case 'success':
-      return chalk.greenBright;
     case 'warning':
-      return chalk.yellowBright;
+      return {
+        accent: chalk.yellowBright,
+        muted: chalk.yellow,
+        borderColor: 'yellow',
+        gradient: warningGradient,
+      };
     case 'error':
-      return chalk.redBright;
+      return {
+        accent: chalk.redBright,
+        muted: chalk.red,
+        borderColor: 'red',
+        gradient: errorGradient,
+      };
     case 'muted':
-      return chalk.gray;
+      return {
+        accent: chalk.white,
+        muted: chalk.gray,
+        borderColor: 'gray',
+        gradient: accentGradient,
+      };
     case 'accent':
-      return chalk.magentaBright;
+      return {
+        accent: chalk.magentaBright,
+        muted: chalk.magenta,
+        borderColor: 'magenta',
+        gradient: accentGradient,
+      };
     case 'info':
     default:
-      return chalk.cyanBright;
+      return {
+        accent: chalk.cyanBright,
+        muted: chalk.cyan,
+        borderColor: 'cyan',
+        gradient: accentGradient,
+      };
   }
 }
 
-function toneAccent(tone: Tone): (text: string) => string {
-  switch (tone) {
-    case 'success':
-      return chalk.green;
-    case 'warning':
-      return chalk.yellow;
-    case 'error':
-      return chalk.red;
-    case 'muted':
-      return chalk.gray;
-    case 'accent':
-      return chalk.magenta;
-    case 'info':
-    default:
-      return chalk.cyan;
-  }
-}
-
-function toneBadge(tone: Tone): (text: string) => string {
-  switch (tone) {
-    case 'success':
-      return chalk.black.bgGreenBright;
-    case 'warning':
-      return chalk.black.bgYellowBright;
-    case 'error':
-      return chalk.white.bgRedBright;
-    case 'muted':
-      return chalk.black.bgWhite;
-    case 'accent':
-      return chalk.black.bgMagentaBright;
-    case 'info':
-    default:
-      return chalk.black.bgCyanBright;
-  }
-}
-
-function bulletSymbol(capabilities: UiCapabilities): string {
-  return capabilities.supportsUnicode ? '✦' : '*';
+function genericCommandLabel(label?: string): boolean {
+  return Boolean(label && /^openmeta(\s|$)/i.test(label));
 }
 
 function statusSymbol(state: StepState): string {
   switch (state) {
     case 'done':
-      return '[success]';
+      return `${figures.tick} [success]`;
     case 'active':
-      return '[>]';
+      return `${figures.pointerSmall} [active]`;
     case 'error':
-      return '[x]';
+      return `${figures.cross} [error]`;
     case 'pending':
     default:
-      return '[ ]';
+      return `${figures.ellipsis} [pending]`;
   }
 }
 
@@ -149,47 +121,145 @@ function printBlankLine(): void {
   process.stdout.write('\n');
 }
 
+function renderPrefixedLines(
+  text: string,
+  width: number,
+  prefix: string,
+  continuationPrefix: string,
+): string[] {
+  const wrapped = wrapLine(text, Math.max(12, width - visibleLength(prefix)));
+  return wrapped.map((line, index) => `${index === 0 ? prefix : continuationPrefix}${line}`);
+}
+
+function renderBrandMark(capabilities: UiCapabilities): string {
+  return applyGradient(capabilities, brandGradient, 'OPENMETA');
+}
+
+function renderRule(capabilities: UiCapabilities, tone: Tone, width: number): string {
+  const chars = capabilities.supportsUnicode ? '─' : '-';
+  return applyGradient(capabilities, paletteForTone(tone).gradient, chars.repeat(Math.max(18, width)));
+}
+
+function buildCardText(capabilities: UiCapabilities, options: CardOptions, variant: CardVariant): string {
+  const tone = options.tone ?? 'info';
+  const palette = paletteForTone(tone);
+  const width = Math.max(38, Math.min(capabilities.width - 14, 88));
+  const rows: string[] = [];
+
+  if (options.label && !genericCommandLabel(options.label)) {
+    rows.push(chalk.dim(options.label.toUpperCase()));
+  }
+
+  rows.push(palette.accent(`${figures.pointerSmall} ${options.title}`));
+
+  if (options.subtitle) {
+    rows.push(...wrapLine(options.subtitle, width).map((line) => chalk.gray(line)));
+  }
+
+  if (options.lines && options.lines.length > 0) {
+    if (variant === 'callout') {
+      rows.push(chalk.gray(renderRule(capabilities, tone, Math.min(24, width))));
+    }
+
+    rows.push(...options.lines.flatMap((line) => renderPrefixedLines(
+      line,
+      width,
+      `${figures.bullet} `,
+      '  ',
+    )));
+  }
+
+  return rows.join('\n');
+}
+
 function printCard(capabilities: UiCapabilities, options: CardOptions, variant: CardVariant = 'standard'): void {
-  const chars = boxChars(capabilities, variant);
-  const width = variant === 'standard'
-    ? Math.max(52, Math.min(capabilities.width - 2, 106))
-    : Math.max(60, Math.min(capabilities.width - 2, 112));
-  const innerWidth = width - 4;
-  const color = toneColor(options.tone ?? 'info');
-  const accent = toneAccent(options.tone ?? 'info');
-  const badge = toneBadge(options.tone ?? 'info');
-  const bullet = bulletSymbol(capabilities);
-  const separator = accent(chars.horizontal.repeat(Math.min(28, innerWidth)));
-
-  const renderedLines = variant === 'standard'
-    ? (options.lines ? wrapLines(options.lines, innerWidth) : [])
-    : (options.lines ?? []).flatMap((line) => wrapLine(`${bullet} ${line}`, innerWidth));
-
-  const content = [
-    ...(options.label ? [badge(` ${options.label.toUpperCase()} `)] : []),
-    variant === 'standard' ? chalk.bold(options.title) : chalk.whiteBright.bold(options.title),
-    ...(options.subtitle ? wrapLine(options.subtitle, innerWidth).map((line) => chalk.gray(line)) : []),
-    ...(variant === 'standard' || renderedLines.length === 0 ? [] : [separator]),
-    ...renderedLines,
-  ];
-
-  const top = `${chars.topLeft}${chars.horizontal.repeat(width - 2)}${chars.topRight}`;
-  const bottom = `${chars.bottomLeft}${chars.horizontal.repeat(width - 2)}${chars.bottomRight}`;
+  const tone = options.tone ?? 'info';
+  const palette = paletteForTone(tone);
+  const content = buildCardText(capabilities, options, variant);
 
   printBlankLine();
-  process.stdout.write(`${color(top)}\n`);
-  for (const line of content) {
-    process.stdout.write(`${color(chars.vertical)} ${padLine(line, innerWidth)} ${color(chars.vertical)}\n`);
+  process.stdout.write(`${boxen(content, {
+    borderColor: capabilities.supportsColor ? palette.borderColor : undefined,
+    borderStyle: capabilities.supportsUnicode ? (variant === 'callout' ? 'double' : 'round') : 'single',
+    padding: { top: 0, right: 1, bottom: 0, left: 1 },
+    margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    width: Math.max(54, Math.min(capabilities.width, 96)),
+    title: options.label && !genericCommandLabel(options.label) ? ` ${options.label.toUpperCase()} ` : undefined,
+    titleAlignment: 'left',
+  })}\n`);
+}
+
+function printHero(capabilities: UiCapabilities, options: CardOptions): void {
+  const tone = options.tone ?? 'accent';
+  const width = Math.max(40, Math.min(capabilities.width - 2, 96));
+  const bullet = figures.pointerSmall;
+  const rule = renderRule(capabilities, tone, Math.min(width, 36));
+
+  printBlankLine();
+  process.stdout.write(`${chalk.bold(renderBrandMark(capabilities))}\n`);
+  process.stdout.write(`${applyGradient(capabilities, paletteForTone(tone).gradient, options.title)}\n`);
+
+  if (options.subtitle) {
+    for (const line of wrapLine(options.subtitle, width)) {
+      process.stdout.write(`${chalk.gray(line)}\n`);
+    }
   }
-  process.stdout.write(`${color(bottom)}\n`);
+
+  if (options.lines && options.lines.length > 0) {
+    process.stdout.write(`${chalk.gray(rule)}\n`);
+    for (const line of options.lines.flatMap((entry) => renderPrefixedLines(
+      entry,
+      width - 2,
+      `${bullet} `,
+      '  ',
+    ))) {
+      const head = line.startsWith(`${bullet} `)
+        ? `${paletteForTone(tone).accent(bullet)} ${chalk.white(line.slice(2))}`
+        : `  ${chalk.white(line.trimStart())}`;
+      process.stdout.write(`${head}\n`);
+    }
+  }
+}
+
+function printCelebration(capabilities: UiCapabilities, options: CardOptions): void {
+  const tone = options.tone ?? 'success';
+  const width = Math.max(40, Math.min(capabilities.width - 2, 96));
+  const rule = renderRule(capabilities, tone, Math.min(width, 42));
+  const symbol = tone === 'success' ? figures.tick : tone === 'warning' ? figures.warning : figures.info;
+
+  printBlankLine();
+  process.stdout.write(`${chalk.gray(rule)}\n`);
+  process.stdout.write(`${applyGradient(capabilities, paletteForTone(tone).gradient, `${symbol} ${options.title}`)}\n`);
+
+  if (options.subtitle) {
+    for (const line of wrapLine(options.subtitle, width)) {
+      process.stdout.write(`${chalk.gray(line)}\n`);
+    }
+  }
+
+  if (options.lines && options.lines.length > 0) {
+    for (const line of options.lines.flatMap((entry) => renderPrefixedLines(
+      entry,
+      width - 2,
+      `${figures.pointerSmall} `,
+      '  ',
+    ))) {
+      const head = line.startsWith(`${figures.pointerSmall} `)
+        ? `${chalk.greenBright(figures.pointerSmall)} ${chalk.white(line.slice(2))}`
+        : `  ${chalk.white(line.trimStart())}`;
+      process.stdout.write(`${head}\n`);
+    }
+  }
+
+  process.stdout.write(`${chalk.gray(rule)}\n`);
 }
 
 function printSection(capabilities: UiCapabilities, title: string, subtitle?: string): void {
   const width = Math.max(44, Math.min(capabilities.width - 2, 106));
-  const dash = capabilities.supportsUnicode ? '─' : '-';
-  const rule = dash.repeat(Math.max(12, width - visibleLength(title) - 3));
+  const rule = capabilities.supportsUnicode ? '─'.repeat(Math.max(10, width - visibleLength(title) - 6)) : '-'.repeat(Math.max(10, width - visibleLength(title) - 6));
+
   printBlankLine();
-  process.stdout.write(`${chalk.cyanBright.bold(title)} ${chalk.gray(rule)}\n`);
+  process.stdout.write(`${applyGradient(capabilities, accentGradient, `${figures.line} ${title}`)} ${chalk.gray(rule)}\n`);
   if (subtitle) {
     for (const line of wrapLine(subtitle, width)) {
       process.stdout.write(`${chalk.gray(line)}\n`);
@@ -198,25 +268,25 @@ function printSection(capabilities: UiCapabilities, title: string, subtitle?: st
 }
 
 function printList(lines: string[], tone: Tone = 'muted'): void {
-  const color = toneColor(tone);
+  const accent = paletteForTone(tone).accent;
   for (const line of lines) {
-    process.stdout.write(`${color('-')} ${chalk.gray(line)}\n`);
+    process.stdout.write(`${accent(figures.pointerSmall)} ${chalk.gray(line)}\n`);
   }
 }
 
 function printKeyValues(capabilities: UiCapabilities, title: string, items: KeyValueItem[]): void {
   const width = Math.max(44, Math.min(capabilities.width - 2, 106));
-  const labelWidth = Math.min(22, Math.max(...items.map((item) => item.label.length), 10));
+  const labelWidth = Math.min(24, Math.max(...items.map((item) => item.label.length), 12));
   printSection(capabilities, title);
 
   for (const item of items) {
     const label = chalk.gray(item.label.padEnd(labelWidth));
-    const valueColor = toneColor(item.tone ?? 'info');
-    const available = Math.max(20, width - labelWidth - 3);
+    const valueColor = paletteForTone(item.tone ?? 'info').accent;
+    const available = Math.max(20, width - labelWidth - 4);
     const wrapped = wrapLine(item.value, available);
 
     wrapped.forEach((line, index) => {
-      const renderedLabel = index === 0 ? label : ' '.repeat(labelWidth);
+      const renderedLabel = index === 0 ? `${figures.pointerSmall} ${label}` : `  ${' '.repeat(labelWidth)}`;
       process.stdout.write(`  ${renderedLabel} ${valueColor(line)}\n`);
     });
   }
@@ -231,12 +301,10 @@ function printStats(capabilities: UiCapabilities, title: string, items: MetricIt
 
   for (let index = 0; index < items.length; index += columns) {
     rows.push(items.slice(index, index + columns).map((item) => {
-      const value = toneColor(item.tone ?? 'accent')(chalk.bold(item.value));
+      const palette = paletteForTone(item.tone ?? 'accent');
+      const value = palette.accent(chalk.bold(item.value));
       const hint = item.hint ? chalk.gray(` ${item.hint}`) : '';
-      const line = `${value}${hint}`;
-      const label = chalk.gray(item.label);
-      const combined = `${line}\n${label}`;
-      return combined;
+      return `${value}${hint}\n${chalk.gray(item.label)}`;
     }));
   }
 
@@ -263,7 +331,7 @@ function printStepper(capabilities: UiCapabilities, title: string, steps: StepIt
     const prefix = chalk.gray(`${String(index + 1).padStart(2, '0')}.`);
     process.stdout.write(`  ${prefix} ${symbol} ${chalk.white(step.label)}\n`);
     if (step.description) {
-      for (const line of wrapLine(step.description, Math.max(36, capabilities.width - 12))) {
+      for (const line of wrapLine(step.description, Math.max(36, capabilities.width - 14))) {
         process.stdout.write(`      ${chalk.gray(line)}\n`);
       }
     }
@@ -277,7 +345,7 @@ function printTimeline(capabilities: UiCapabilities, title: string, items: Timel
     const color = statusColor(item.state);
     process.stdout.write(`  ${color(statusSymbol(item.state))} ${chalk.white(item.title)}${item.meta ? chalk.gray(`  ${item.meta}`) : ''}\n`);
     if (item.subtitle) {
-      for (const line of wrapLine(item.subtitle, Math.max(36, capabilities.width - 10))) {
+      for (const line of wrapLine(item.subtitle, Math.max(36, capabilities.width - 12))) {
         process.stdout.write(`      ${chalk.gray(line)}\n`);
       }
     }
@@ -286,11 +354,10 @@ function printTimeline(capabilities: UiCapabilities, title: string, items: Timel
 
 function printRecordList(capabilities: UiCapabilities, title: string, items: RecordItem[]): void {
   printSection(capabilities, title);
-  const marker = capabilities.supportsUnicode ? '◆' : '*';
 
   for (const item of items) {
-    const accent = toneColor(item.tone ?? 'info');
-    process.stdout.write(`  ${accent(marker)} ${accent(item.title)}\n`);
+    const accent = paletteForTone(item.tone ?? 'info').accent;
+    process.stdout.write(`  ${accent(figures.bullet)} ${accent(item.title)}\n`);
     if (item.subtitle) {
       for (const line of wrapLine(item.subtitle, Math.max(36, capabilities.width - 10))) {
         process.stdout.write(`      ${chalk.gray(line)}\n`);
@@ -308,7 +375,7 @@ function printRecordList(capabilities: UiCapabilities, title: string, items: Rec
 }
 
 function makeBadge(label: string, tone: Tone = 'info'): string {
-  return toneColor(tone)(`[${label}]`);
+  return paletteForTone(tone).accent(`[${label}]`);
 }
 
 function maskSecret(secret?: string): string {
@@ -327,73 +394,73 @@ function completionCopy(commandName: string): Pick<CardOptions, 'title' | 'subti
   switch (commandName) {
     case 'OpenMeta Agent':
       return {
-        title: 'The contribution arc closed cleanly',
-        subtitle: 'Signal, context, draft, and artifacts have all settled into a readable end state.',
+        title: 'The contribution arc resolved with a clean finish',
+        subtitle: 'The field, the repository, and the artifact trail now sit in one readable line of motion.',
         lines: [
-          'Review the panels above, then either ship the next move or let the loop rest.',
+          'Pick up the next move only if it still feels sharper than stopping here.',
         ],
         tone: 'success',
       };
     case 'OpenMeta Init':
       return {
-        title: 'The setup ritual landed without drift',
-        subtitle: 'Credentials, profile, and automation posture are now aligned for the next run.',
+        title: 'The cockpit is calibrated and ready',
+        subtitle: 'Identity, model, profile, and automation posture now move as one system.',
         lines: [
-          'The terminal is quiet again, and the path forward is explicit.',
+          'The next run can begin without re-explaining yourself to the machine.',
         ],
         tone: 'success',
       };
     case 'OpenMeta Scout':
       return {
-        title: 'The field has been read and narrowed',
-        subtitle: 'The shortlist above is ready for a deliberate next decision.',
+        title: 'The noise has been cut into a usable shortlist',
+        subtitle: 'You now have a field worth choosing from, not just a pile worth scanning.',
         lines: [
-          'Spend attention where the signal is strongest.',
+          'Start where the signal is strongest, not where the list is longest.',
         ],
         tone: 'success',
       };
     case 'OpenMeta Config':
       return {
-        title: 'The control surface is in a clean state',
-        subtitle: 'Configuration output finished without interruption.',
+        title: 'The control surface is steady and legible',
+        subtitle: 'Configuration output finished in a state you can inspect at a glance.',
         lines: [
-          'If something still looks off, the panels above are now easy to inspect.',
+          'What matters is now visible without spelunking through raw JSON.',
         ],
         tone: 'success',
       };
     case 'OpenMeta Automation':
       return {
-        title: 'The scheduler state settled cleanly',
-        subtitle: 'Automation policy and local state are now speaking the same language.',
+        title: 'The unattended cadence is now in tune',
+        subtitle: 'Scheduler state and local intent are no longer drifting apart.',
         lines: [
-          'Leave it running, or reshape the cadence whenever you want.',
+          'Leave the loop quiet, or let it keep moving in the background.',
         ],
         tone: 'success',
       };
     case 'OpenMeta Inbox':
       return {
-        title: 'The shortlist is current and ready',
-        subtitle: 'Drafted opportunities have been surfaced in a form meant for quick return.',
+        title: 'The shortlist is staged for a fast return',
+        subtitle: 'The most promising drafted opportunities are now easy to revisit without friction.',
         lines: [
-          'Come back when you want the next smart starting point.',
+          'Come back when you want the next smart entry point, not another search session.',
         ],
         tone: 'success',
       };
     case 'OpenMeta PoW':
       return {
-        title: 'The ledger is closed and readable',
-        subtitle: 'Every recorded run above now sits in a stable, reviewable trail.',
+        title: 'The work trail is closed into a readable ledger',
+        subtitle: 'The record above can now be reviewed like a narrative instead of a dump.',
         lines: [
-          'You can trace momentum without digging through raw files.',
+          'Momentum is easier to trust when the trail stays legible.',
         ],
         tone: 'success',
       };
     default:
       return {
-        title: 'Execution sealed cleanly',
-        subtitle: 'OpenMeta finished this command without interruption.',
+        title: 'Execution settled into a clean end state',
+        subtitle: 'The terminal is back in a readable, stable posture.',
         lines: [
-          'The terminal is back in a known, stable state.',
+          'Nothing is fighting for attention anymore.',
         ],
         tone: 'success',
       };
@@ -408,10 +475,10 @@ export const ui = {
   },
 
   hero(options: CardOptions): void {
-    printCard(capabilities, {
+    printHero(capabilities, {
       ...options,
       tone: options.tone ?? 'accent',
-    }, 'hero');
+    });
   },
 
   card(options: CardOptions): void {
@@ -419,7 +486,7 @@ export const ui = {
   },
 
   callout(options: CardOptions): void {
-    printCard(capabilities, options);
+    printCard(capabilities, options, 'callout');
   },
 
   section(title: string, subtitle?: string): void {
@@ -459,42 +526,38 @@ export const ui = {
   },
 
   commandCompleted(commandName: string): void {
-    const copy = completionCopy(commandName);
-    printCard(capabilities, {
-      label: commandName,
-      ...copy,
-    }, 'celebration');
+    printCelebration(capabilities, completionCopy(commandName));
   },
 
   async task<T>(options: TaskOptions, task: () => Promise<T>): Promise<T> {
     return runTask(capabilities, options, task);
   },
 
-  commandCancelled(commandName: string): void {
+  commandCancelled(_commandName: string): void {
     printCard(capabilities, {
-      label: commandName,
-      title: 'Session closed',
-      subtitle: 'No changes were made because the flow was cancelled by the user.',
+      title: 'The session was closed before the line finished',
+      subtitle: 'Nothing was written, nothing was published, and the terminal remains in a safe state.',
       tone: 'warning',
-    });
+    }, 'callout');
   },
 
-  commandFailed(commandName: string, message: string): void {
+  commandFailed(_commandName: string, message: string): void {
     printCard(capabilities, {
-      label: commandName,
-      title: 'Command failed',
+      title: 'The run broke out of its intended path',
       subtitle: message,
+      lines: [
+        'Inspect the message above, fix the blocking edge, and run again from a clean state.',
+      ],
       tone: 'error',
-    });
+    }, 'callout');
   },
 
-  emptyState(commandName: string, title: string, subtitle: string): void {
+  emptyState(_commandName: string, title: string, subtitle: string): void {
     printCard(capabilities, {
-      label: commandName,
       title,
       subtitle,
       tone: 'warning',
-    });
+    }, 'callout');
   },
 };
 

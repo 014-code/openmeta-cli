@@ -1,29 +1,45 @@
 import chalk from 'chalk';
-import { stripAnsi } from './layout.js';
+import figures from 'figures';
+import ora from 'ora';
+import type { Color } from 'ora';
 import type { TaskOptions, Tone, UiCapabilities } from './types.js';
 
-const FRAMES = ['-', '\\', '|', '/'];
-
-function toneColor(tone: Tone): (text: string) => string {
+function toneColor(tone: Tone): Color {
   switch (tone) {
     case 'success':
-      return chalk.greenBright;
+      return 'green';
     case 'warning':
-      return chalk.yellowBright;
+      return 'yellow';
     case 'error':
-      return chalk.redBright;
-    case 'muted':
-      return chalk.gray;
+      return 'red';
     case 'accent':
-      return chalk.magentaBright;
+      return 'magenta';
+    case 'muted':
+      return 'white';
     case 'info':
     default:
-      return chalk.cyanBright;
+      return 'cyan';
   }
 }
 
-function renderStatusLine(symbol: string, message: string, color: (text: string) => string): string {
-  return color(`${symbol} ${message}`);
+function renderInlineStatus(symbol: string, text: string, tone: Tone): string {
+  const color = toneColor(tone);
+
+  switch (color) {
+    case 'green':
+      return chalk.greenBright(`${symbol} ${text}`);
+    case 'yellow':
+      return chalk.yellowBright(`${symbol} ${text}`);
+    case 'red':
+      return chalk.redBright(`${symbol} ${text}`);
+    case 'magenta':
+      return chalk.magentaBright(`${symbol} ${text}`);
+    case 'white':
+      return chalk.white(`${symbol} ${text}`);
+    case 'cyan':
+    default:
+      return chalk.cyanBright(`${symbol} ${text}`);
+  }
 }
 
 export async function runTask<T>(
@@ -32,54 +48,37 @@ export async function runTask<T>(
   task: () => Promise<T>,
 ): Promise<T> {
   const tone = options.tone ?? 'info';
-  const color = toneColor(tone);
 
   if (!capabilities.isInteractive || capabilities.mode === 'plain') {
-    process.stdout.write(`${renderStatusLine('[>]', options.title, color)}\n`);
+    process.stdout.write(`${renderInlineStatus(figures.pointerSmall, options.title, tone)}\n`);
     try {
       const result = await task();
-      process.stdout.write(`${renderStatusLine('[success]', options.doneMessage || options.title, chalk.greenBright)}\n`);
+      process.stdout.write(`${renderInlineStatus(figures.tick, `[success] ${options.doneMessage || options.title}`, 'success')}\n`);
       return result;
     } catch (error) {
-      process.stdout.write(`${renderStatusLine('[x]', options.failedMessage || options.title, chalk.redBright)}\n`);
+      process.stdout.write(`${renderInlineStatus(figures.cross, options.failedMessage || options.title, 'error')}\n`);
       throw error;
     }
   }
 
-  let frameIndex = 0;
-  const writeFrame = (text: string) => {
-    const line = renderStatusLine(`[${FRAMES[frameIndex]}]`, text, color);
-    frameIndex = (frameIndex + 1) % FRAMES.length;
-    process.stdout.write(`\r${line}`);
-    const remainder = Math.max(0, capabilities.width - stripAnsi(line).length);
-    if (remainder > 0) {
-      process.stdout.write(' '.repeat(remainder));
-    }
-  };
-
-  writeFrame(options.title);
-  const timer = setInterval(() => writeFrame(options.title), 90);
+  const spinner = ora({
+    text: options.title,
+    color: toneColor(tone),
+    spinner: capabilities.supportsUnicode ? 'dots12' : 'line',
+  }).start();
 
   try {
     const result = await task();
-    clearInterval(timer);
-    if (typeof process.stdout.clearLine === 'function') {
-      process.stdout.clearLine(0);
-      process.stdout.cursorTo(0);
-    } else {
-      process.stdout.write('\r');
-    }
-    process.stdout.write(`${renderStatusLine('[success]', options.doneMessage || options.title, chalk.greenBright)}\n`);
+    spinner.stopAndPersist({
+      symbol: chalk.greenBright(`${figures.tick} [success]`),
+      text: options.doneMessage || options.title,
+    });
     return result;
   } catch (error) {
-    clearInterval(timer);
-    if (typeof process.stdout.clearLine === 'function') {
-      process.stdout.clearLine(0);
-      process.stdout.cursorTo(0);
-    } else {
-      process.stdout.write('\r');
-    }
-    process.stdout.write(`${renderStatusLine('[x]', options.failedMessage || options.title, chalk.redBright)}\n`);
+    spinner.stopAndPersist({
+      symbol: chalk.redBright(`${figures.cross} [error]`),
+      text: options.failedMessage || options.title,
+    });
     throw error;
   }
 }
