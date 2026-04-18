@@ -1,5 +1,5 @@
-import select from '@inquirer/select';
-import { isPromptAbortError, UserCancelledError } from './errors.js';
+import * as p from '@clack/prompts';
+import { UserCancelledError } from './errors.js';
 
 export interface SelectChoice<T> {
   name: string;
@@ -14,18 +14,23 @@ export async function selectPrompt<T>(options: {
   default?: T;
   pageSize?: number;
 }): Promise<T> {
-  try {
-    return await select({
-      message: options.message,
-      choices: options.choices,
-      default: options.default,
-      pageSize: options.pageSize ?? 10,
-    });
-  } catch (error) {
-    if (isPromptAbortError(error)) {
-      throw new UserCancelledError();
-    }
-    throw error;
-  }
-}
+  const mappedOptions = options.choices.map((choice) => ({
+    value: choice.value,
+    label: choice.name,
+    ...(choice.description ? { hint: choice.description } : {}),
+    ...(choice.disabled ? { disabled: true } : {}),
+  })) as Parameters<typeof p.select<T>>[0]['options'];
 
+  const result = await p.select<T>({
+    message: options.message,
+    options: mappedOptions,
+    initialValue: options.default,
+    maxItems: options.pageSize ?? 10,
+  });
+
+  if (p.isCancel(result)) {
+    throw new UserCancelledError();
+  }
+
+  return result as T;
+}

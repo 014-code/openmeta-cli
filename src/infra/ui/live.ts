@@ -1,10 +1,9 @@
+import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import figures from 'figures';
-import ora from 'ora';
-import type { Color } from 'ora';
 import type { TaskOptions, Tone, UiCapabilities } from './types.js';
 
-function toneColor(tone: Tone): Color {
+function toneColor(tone: Tone): 'green' | 'yellow' | 'red' | 'magenta' | 'white' | 'cyan' {
   switch (tone) {
     case 'success':
       return 'green';
@@ -61,24 +60,17 @@ export async function runTask<T>(
     }
   }
 
-  const spinner = ora({
-    text: options.title,
-    color: toneColor(tone),
-    spinner: capabilities.supportsUnicode ? 'dots12' : 'line',
-  }).start();
+  const spinner = p.spinner({
+    indicator: capabilities.supportsUnicode ? 'dots' : 'timer',
+  });
+  spinner.start(options.title);
 
   try {
     const result = await task();
-    spinner.stopAndPersist({
-      symbol: chalk.greenBright(`${figures.tick} [success]`),
-      text: options.doneMessage || options.title,
-    });
+    spinner.stop(`${figures.tick} [success] ${options.doneMessage || options.title}`);
     return result;
   } catch (error) {
-    spinner.stopAndPersist({
-      symbol: chalk.redBright(`${figures.cross} [error]`),
-      text: options.failedMessage || options.title,
-    });
+    spinner.error(`${figures.cross} [error] ${options.failedMessage || options.title}`);
     throw error;
   }
 }
