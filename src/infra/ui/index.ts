@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import boxen from 'boxen';
 import chalk from 'chalk';
 import figures from 'figures';
+import gradient from 'gradient-string';
 import { getOpenMetaWordmarkLines } from './brand.js';
 import { getUiCapabilities } from './capabilities.js';
 import { padLine, visibleLength, wrapLine } from './layout.js';
@@ -125,17 +126,37 @@ function renderPrefixedLines(
 function renderBrandMark(capabilities: UiCapabilities, tone: Tone = 'accent'): string[] {
   const lines = getOpenMetaWordmarkLines();
   const palette = paletteForTone(tone);
+  const gradientForTone = (() => {
+    switch (tone) {
+      case 'success':
+        return gradient(['#8df7a3', '#3ddc97', '#8df7a3']);
+      case 'warning':
+        return gradient(['#ffe28a', '#ffb347', '#ffe28a']);
+      case 'error':
+        return gradient(['#ffb0b0', '#ff5f6d', '#ffb0b0']);
+      case 'muted':
+        return gradient(['#f4f4f5', '#d4d4d8', '#f4f4f5']);
+      case 'accent':
+        return gradient(['#7dd3fc', '#c084fc', '#f9a8d4']);
+      case 'info':
+      default:
+        return gradient(['#67e8f9', '#60a5fa', '#a78bfa']);
+    }
+  })();
 
   return lines.map((line, index) => {
+    const slantedLine = `${' '.repeat(Math.floor(index / 2))}${line}`;
+
     if (!capabilities.supportsColor) {
-      return line;
+      return slantedLine;
     }
 
-    if (index === 0 || index === lines.length - 1) {
-      return chalk.whiteBright.bold(line);
-    }
+    const coloredLine = gradientForTone.multiline(slantedLine);
+    const emphasizedLine = index === 0 || index === lines.length - 1
+      ? chalk.whiteBright.bold.italic(coloredLine)
+      : chalk.bold.italic(coloredLine);
 
-    return palette.accent.bold(line);
+    return palette.accent === chalk.white ? chalk.white(emphasizedLine) : emphasizedLine;
   });
 }
 
