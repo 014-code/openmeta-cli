@@ -1,0 +1,57 @@
+import { describe, expect, test } from 'bun:test';
+import { contentService } from '../src/services/content.js';
+import {
+  createInboxItem,
+  createMatchedIssue,
+  createMemory,
+  createProofRecord,
+  createRankedIssue,
+  createWorkspace,
+} from './helpers/factories.js';
+
+describe('contentService', () => {
+  test('formats generated research notes as markdown with related issues', () => {
+    const issue = createMatchedIssue();
+    const content = contentService.generateResearchNote([issue], 'Body content');
+    const markdown = contentService.formatAsMarkdown(content);
+
+    expect(markdown).toContain('# Daily Open Source Issue Research Notes');
+    expect(markdown).toContain('Body content');
+    expect(markdown).toContain('### [acme/demo#42] Add accessible labels to icon buttons');
+    expect(markdown).toContain('- Match Score: 86/100');
+  });
+
+  test('formats contribution dossier with enriched issue and workspace context', () => {
+    const markdown = contentService.formatContributionDossier(
+      createRankedIssue(),
+      createWorkspace(),
+      createMemory(),
+      'Patch Draft Body',
+      'PR Draft Body',
+    );
+
+    expect(markdown).toContain('## Opportunity Snapshot');
+    expect(markdown).toContain('- Repo Stars: 240');
+    expect(markdown).toContain('- Issue Link: https://github.com/acme/demo/issues/42');
+    expect(markdown).toContain('- Labels: good first issue, help wanted');
+    expect(markdown).toContain('- `bun test` | Detected Bun tests');
+    expect(markdown).toContain('Patch Draft Body');
+    expect(markdown).toContain('PR Draft Body');
+  });
+
+  test('formats inbox and proof-of-work markdown summaries', () => {
+    const inboxMarkdown = contentService.formatInboxMarkdown([createInboxItem()]);
+    const proofMarkdown = contentService.formatProofOfWorkMarkdown([createProofRecord()]);
+
+    expect(inboxMarkdown).toContain('[READY] acme/demo#42 | overall 84');
+    expect(proofMarkdown).toContain('acme/demo#42 | overall 84 | published=true');
+  });
+
+  test('formats commit messages using the configured template', () => {
+    const content = contentService.generateDiary([createMatchedIssue()], 'Diary body');
+    const commitMessage = contentService.formatCommitMessage(content, 'feat: {{title}}\n\n{{content}}');
+
+    expect(commitMessage).toContain('feat: Development Diary -');
+    expect(commitMessage).toContain('Daily open source contribution log');
+  });
+});
