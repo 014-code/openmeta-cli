@@ -7,10 +7,10 @@ export class AutomationOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Automation',
-      title: config.automation.enabled ? 'Unattended contribution loop is armed' : 'Unattended contribution loop is idle',
+      title: config.automation.enabled ? 'The unattended loop is warm and waiting' : 'The unattended loop is quiet, waiting for your signal',
       subtitle: config.automation.enabled
-        ? 'A persistent system scheduler is configured for headless agent runs.'
-        : 'No unattended scheduler is currently active. Manual runs remain available at any time.',
+        ? 'A persistent scheduler is already holding the line for headless agent runs.'
+        : 'No persistent scheduler is active right now. Manual runs are still one clean command away.',
       lines: [
         `Schedule: ${config.automation.scheduleTime} (${config.automation.timezone})`,
         `Scheduler provider: ${config.automation.scheduler}`,
@@ -146,7 +146,7 @@ export class AutomationOrchestrator {
 
     ui.card({
       label: 'OpenMeta Automation',
-      title: result.status === 'installed' ? 'Automation enabled' : 'Automation needs attention',
+      title: result.status === 'installed' ? 'The unattended loop is now alive' : 'Automation needs attention',
       subtitle: result.detail,
       lines: [
         `Schedule: ${updated.automation.scheduleTime} (${updated.automation.timezone})`,
@@ -204,7 +204,7 @@ export class AutomationOrchestrator {
 
     ui.card({
       label: 'OpenMeta Automation',
-      title: result.status === 'removed' ? 'Automation disabled' : 'Automation disable needs attention',
+      title: result.status === 'removed' ? 'The unattended loop has gone quiet' : 'Automation disable needs attention',
       subtitle: result.detail,
       lines: [
         `Scheduler: ${updated.automation.scheduler}`,

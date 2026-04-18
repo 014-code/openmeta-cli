@@ -100,11 +100,11 @@ export class InitOrchestrator {
   async execute(): Promise<void> {
     ui.hero({
       label: 'OpenMeta Init',
-      title: 'Build your contribution workspace',
-      subtitle: 'We will verify GitHub access, connect an LLM provider, and save your matching profile.',
+      title: 'Assemble a sharper cockpit for contribution work',
+      subtitle: 'Connect GitHub, your model, and your preferences so every later run feels guided instead of improvised.',
       lines: [
-        'Everything stays local except the API calls you explicitly configure.',
-        'Press Ctrl+C at any time to leave the setup cleanly.',
+        'Local-first by default. Only the APIs you explicitly authorize ever leave the machine.',
+        'Once saved, OpenMeta remembers the route as well as the result. Press Ctrl+C at any time to step away cleanly.',
       ],
     });
 
@@ -431,8 +431,8 @@ export class InitOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Init',
-      title: 'Setup complete',
-      subtitle: 'Your local workspace is ready for unattended contribution scouting and artifact generation.',
+      title: 'The cockpit is wired and ready',
+      subtitle: 'OpenMeta now has enough shape to scout, draft, and automate with intention instead of guesswork.',
       lines: [
         `Config saved at: ${configService.getConfigPath()}`,
         nextStepMessage,

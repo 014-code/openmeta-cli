@@ -112,20 +112,15 @@ export class AgentOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Agent',
-      title: headless ? 'Run autonomous contribution loop' : 'Start autonomous contribution loop',
+      title: headless ? 'Let the contribution loop move with quiet precision' : 'Pull a clean contribution arc out of the noise',
       subtitle: headless
-        ? 'OpenMeta will scout, prepare repo context, draft patch and PR artifacts, then publish the dossier.'
-        : 'OpenMeta will scout opportunities, prepare repo context, and draft contribution artifacts.',
+        ? 'OpenMeta will read the field, enter the repository, draft the patch path, and carry the run through to publication without another stop for review.'
+        : 'OpenMeta will read the field, enter the repository, shape a patch direction, and leave behind artifacts that feel deliberate instead of improvised.',
       lines: [
-        runChecks ? 'Baseline validation commands will run when they can be detected.' : 'Baseline validation commands are skipped for this run.',
+        runChecks ? 'Baseline checks will fire wherever the repository exposes a safe command path.' : 'This pass will stay light and skip baseline checks.',
+        headless ? `Unattended selection honors the saved threshold at ${config.automation.minMatchScore}/100.` : 'You stay in control at each decision gate before anything is published.',
       ],
     });
-
-    ui.keyValues('Run profile', [
-      { label: 'Execution mode', value: headless ? 'headless' : 'interactive', tone: headless ? 'warning' : 'info' },
-      { label: 'Validation', value: runChecks ? 'baseline checks enabled' : 'skipped for this run', tone: runChecks ? 'success' : 'muted' },
-      { label: 'Automation threshold', value: `${config.automation.minMatchScore}/100`, tone: 'info' },
-    ]);
 
     await this.validateConfig(config);
 
@@ -326,8 +321,11 @@ export class AgentOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Scout',
-      title: 'Top contribution opportunities',
-      subtitle: 'Issues are ranked by technical match and opportunity score.',
+      title: 'Read the field before you spend your focus',
+      subtitle: 'OpenMeta turns a noisy issue stream into a shortlist shaped by technical fit, timing, and real opening momentum.',
+      lines: [
+        `Saved threshold reference: ${config.automation.minMatchScore}/100.`,
+      ],
     });
 
     const rankedIssues = await ui.task({
@@ -356,8 +354,8 @@ export class AgentOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Inbox',
-      title: items.length > 0 ? 'Contribution inbox ready' : 'Contribution inbox is empty',
-      subtitle: 'OpenMeta keeps the highest-value drafted opportunities here.',
+      title: items.length > 0 ? 'Keep the right opportunities within arm\'s reach' : 'The shortlist is quiet for now',
+      subtitle: 'This is the retained shortlist: drafted, scored, and kept close for the next sharp move.',
       tone: items.length > 0 ? 'accent' : 'warning',
     });
 
@@ -396,8 +394,8 @@ export class AgentOrchestrator {
 
     ui.hero({
       label: 'OpenMeta PoW',
-      title: records.length > 0 ? 'Proof of work available' : 'No proof of work yet',
-      subtitle: 'Every agent run is recorded as a contribution asset.',
+      title: records.length > 0 ? 'Keep a readable trail of work that actually landed' : 'No trail has been written yet',
+      subtitle: 'Every run leaves a ledger of what was chosen, what changed, and what reached publication.',
       tone: records.length > 0 ? 'accent' : 'warning',
     });
 
@@ -907,10 +905,10 @@ export class AgentOrchestrator {
 
     ui.card({
       label: 'OpenMeta Agent',
-      title: input.pullRequestUrl ? 'Contribution artifacts published and PR linked' : 'Contribution artifacts published',
+      title: input.pullRequestUrl ? 'Artifacts sealed into the ledger and linked to a live PR' : 'Artifacts sealed into the ledger',
       subtitle: input.pullRequestUrl
-        ? 'The agent dossier, patch draft, PR draft, inbox, and proof-of-work have been committed, and the real draft PR link is recorded.'
-        : 'The agent dossier, patch draft, PR draft, inbox, and proof-of-work have been committed.',
+        ? 'The dossier, drafts, inbox, and proof-of-work are now committed, and the live draft PR sits in the same trail.'
+        : 'The dossier, drafts, inbox, and proof-of-work now sit in a stable published trail.',
       lines: [
         `Issue: ${input.issue.repoFullName}#${input.issue.number}`,
         `Branch: ${publishResult.branch}`,
@@ -1002,8 +1000,8 @@ export class AgentOrchestrator {
 
       ui.card({
         label: 'OpenMeta Agent',
-        title: 'Draft PR created',
-        subtitle: 'The generated patch has been pushed to your fork and opened as a real draft PR against the upstream repository.',
+        title: 'Draft PR opened without drift',
+        subtitle: 'The generated patch has been pushed to your fork and turned into a real upstream draft PR.',
         lines: [
           `Repository: ${input.issue.repoFullName}`,
           `Branch: ${branchName}`,
@@ -1177,8 +1175,8 @@ export class AgentOrchestrator {
   private showResult(result: ContributionAgentResult): void {
     ui.hero({
       label: 'OpenMeta Agent',
-      title: 'Agent run complete',
-      subtitle: 'OpenMeta generated contribution artifacts and updated its long-term memory.',
+      title: 'The contribution arc landed cleanly',
+      subtitle: 'OpenMeta moved from issue signal to working artifacts and left the full trail in a readable state.',
       lines: [
         `Artifacts: ${result.artifacts.artifactDir}`,
         ...(result.pullRequestUrl ? [`Pull Request: ${result.pullRequestUrl}`] : []),

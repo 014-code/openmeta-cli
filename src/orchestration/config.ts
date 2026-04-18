@@ -13,8 +13,8 @@ export class ConfigOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Config',
-      title: 'Configuration snapshot',
-      subtitle: 'Review contribution profile, provider credentials, and automation posture from a single place.',
+      title: 'See the machine state without digging through raw files',
+      subtitle: 'Profile, credentials, defaults, and automation policy arranged into one readable control surface.',
       lines: [
         `Config path: ${configService.getConfigPath()}`,
         missingRequired === 0 ? 'Critical settings are present.' : `${missingRequired} critical setting group still needs attention.`,
@@ -194,8 +194,8 @@ export class ConfigOrchestrator {
 
     ui.card({
       label: 'OpenMeta Config',
-      title: 'Configuration updated',
-      subtitle: 'The requested setting was written to local storage.',
+      title: 'The setting change has been sealed',
+      subtitle: 'Local configuration accepted the update without friction.',
       lines: [
         `Key: ${key}`,
         `Value: ${this.describeUpdatedValue(key, updated)}`,
@@ -231,8 +231,8 @@ export class ConfigOrchestrator {
       await configService.reset();
       ui.banner({
         label: 'OpenMeta Config',
-        title: 'Configuration reset',
-        subtitle: 'Local settings were restored to their defaults.',
+        title: 'The control surface returned to a clean slate',
+        subtitle: 'Local settings have been rolled back to their defaults.',
         lines: [`Config file: ${configService.getConfigPath()}`],
         tone: 'success',
       });
