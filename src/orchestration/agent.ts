@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { Octokit } from '@octokit/rest';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type {
@@ -749,6 +749,11 @@ export class AgentOrchestrator {
     }
 
     return results.map((result) => `${result.command}=${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`).join('; ');
+  }
+
+  private extractTitleLine(prDraft: string): string {
+    const line = prDraft.split('\n').find((candidate) => candidate.trim().startsWith('Title'));
+    return line ? line.replace(/^Title:\s*/i, '').trim() : 'n/a';
   }
 
   private showResult(result: ContributionAgentResult): void {
