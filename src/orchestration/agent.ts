@@ -61,6 +61,7 @@ interface ContributionPullRequestResult {
 }
 
 type AgentStageId = 'scout' | 'select' | 'prepare' | 'draft' | 'validate' | 'pr' | 'publish';
+const ARTIFACT_PUBLISH_BRANCH = 'openmeta-artifacts';
 
 const AGENT_STAGES: Array<{ id: AgentStageId; label: string; description: string }> = [
   {
@@ -171,7 +172,12 @@ export class AgentOrchestrator {
       doneMessage: 'Workspace prepared',
       failedMessage: 'Workspace preparation failed',
       tone: 'info',
-    }, async () => workspaceService.prepareWorkspace(selectedIssue, memoryBeforeRun, runChecks));
+    }, async () => workspaceService.prepareWorkspace(
+      selectedIssue,
+      memoryBeforeRun,
+      runChecks,
+      headless ? 'headless' : 'interactive',
+    ));
     const memory = memoryService.update(selectedIssue, workspace);
     completedStages.add('prepare');
     this.showWorkspaceSummary(workspace, memory);
@@ -515,9 +521,10 @@ export class AgentOrchestrator {
   private showWorkspaceSummary(workspace: RepoWorkspaceContext, memory: ContributionAgentResult['memory']): void {
     ui.stats('Workspace snapshot', [
       { label: 'Candidate files', value: String(workspace.candidateFiles.length), tone: 'success' },
-      { label: 'Test commands', value: String(workspace.testCommands.length), tone: workspace.testCommands.length > 0 ? 'info' : 'muted' },
+      { label: 'Detected checks', value: String(workspace.testCommands.length), tone: workspace.testCommands.length > 0 ? 'info' : 'muted' },
+      { label: 'Runnable checks', value: String(workspace.validationCommands.length), tone: workspace.validationCommands.length > 0 ? 'accent' : 'muted' },
       { label: 'Dirty workspace', value: workspace.workspaceDirty ? 'YES' : 'NO', tone: workspace.workspaceDirty ? 'warning' : 'success' },
-      { label: 'Memory dossiers', value: String(memory.generatedDossiers), tone: 'accent' },
+      { label: 'Memory dossiers', value: String(memory.generatedDossiers), tone: 'info' },
     ]);
 
     ui.keyValues('Workspace details', [
@@ -538,11 +545,27 @@ export class AgentOrchestrator {
         title: 'Detected validation commands',
         meta: [`${workspace.testCommands.length} command(s)`],
         lines: workspace.testCommands.length > 0
-          ? workspace.testCommands.slice(0, 5).map((command) => `${command.command} (${command.reason})`)
+          ? workspace.testCommands.slice(0, 5).map((command) => `${command.command} (${command.reason}; ${command.source})`)
           : ['No baseline validation command detected.'],
         tone: workspace.testCommands.length > 0 ? 'accent' : 'warning',
       },
+      {
+        title: 'Runnable validation commands',
+        meta: [`${workspace.validationCommands.length} command(s)`],
+        lines: workspace.validationCommands.length > 0
+          ? workspace.validationCommands.slice(0, 5).map((command) => `${command.command} (${command.source})`)
+          : ['No validation command is eligible to run in this mode.'],
+        tone: workspace.validationCommands.length > 0 ? 'success' : 'warning',
+      },
     ]);
+
+    if (workspace.validationWarnings.length > 0) {
+      ui.recordList('Validation safety notes', workspace.validationWarnings.map((warning) => ({
+        title: 'Skipped command',
+        lines: [warning],
+        tone: 'warning',
+      })));
+    }
   }
 
   private showValidationSummary(workspace: RepoWorkspaceContext, changedFiles: string[]): void {
@@ -559,8 +582,10 @@ export class AgentOrchestrator {
       ui.callout({
         label: 'OpenMeta Agent',
         title: 'Validation was not executed',
-        subtitle: workspace.testCommands.length === 0
-          ? 'No baseline validation command was detected in the repository.'
+        subtitle: workspace.validationCommands.length === 0
+          ? 'No validation command was eligible to run in the current mode.'
+          : workspace.testCommands.length === 0
+            ? 'No baseline validation command was detected in the repository.'
           : 'This run skipped baseline validation commands.',
         tone: 'warning',
       });
@@ -609,6 +634,7 @@ export class AgentOrchestrator {
       { label: 'Overall score', value: String(input.issue.opportunity.overallScore), tone: 'success' },
       { label: 'Changed files', value: input.changedFiles.length > 0 ? input.changedFiles.join(', ') : 'none', tone: 'info' },
       { label: 'Validation', value: this.formatValidationSummary(input.validationResults), tone: 'info' },
+      { label: 'Artifact branch', value: ARTIFACT_PUBLISH_BRANCH, tone: 'info' },
     ]);
   }
 
@@ -783,7 +809,7 @@ export class AgentOrchestrator {
     issue: RankedIssue,
     workspace: RepoWorkspaceContext,
     patchDraft: string,
-  runChecks: boolean,
+    runChecks: boolean,
   ): Promise<{ changedFiles: string[]; validationResults: TestResult[] }> {
     try {
       const implementation = await ui.task({
@@ -836,14 +862,28 @@ export class AgentOrchestrator {
 
       logger.success(`Applied ${changedFiles.length} workspace file updates`);
 
-      const validationResults = runChecks && workspace.testCommands.length > 0
+      const validationResults = runChecks && workspace.validationCommands.length > 0
         ? await ui.task({
           title: 'Running baseline validation commands',
           doneMessage: 'Baseline validation complete',
           failedMessage: 'Baseline validation finished with issues',
           tone: 'info',
-        }, async () => workspaceService.runValidationCommands(workspace.workspacePath, workspace.testCommands.slice(0, 3)))
+        }, async () => workspaceService.runValidationCommands(workspace.workspacePath, workspace.validationCommands.slice(0, 3)))
         : workspace.testResults;
+
+      if (runChecks && changedFiles.length > 0 && this.hasBlockingValidationFailures(validationResults)) {
+        const repaired = await this.attemptValidationRepair({
+          issue,
+          workspace,
+          patchDraft,
+          changedFiles,
+          validationResults,
+        });
+
+        if (repaired) {
+          return repaired;
+        }
+      }
 
       return {
         changedFiles,
@@ -897,7 +937,10 @@ export class AgentOrchestrator {
       { path: join('memory', `${input.issue.repoFullName.replace(/\//g, '__')}.md`), content: input.memoryMarkdown },
       { path: 'INBOX.md', content: input.inboxMarkdown },
       { path: 'PROOF_OF_WORK.md', content: input.proofMarkdown },
-    ], commitMessage);
+    ], commitMessage, {
+      branchName: ARTIFACT_PUBLISH_BRANCH,
+      baseBranch: targetRepo.defaultBranch,
+    });
 
     if (!publishResult) {
       throw new Error('OpenMeta could not publish the generated contribution artifacts.');
@@ -938,9 +981,7 @@ export class AgentOrchestrator {
     }
 
     const hasValidationFailures = input.validationResults.some((result) => !result.passed);
-    const hasBlockingValidationFailures = input.validationResults.some(
-      (result) => !result.passed && !this.isInfrastructureValidationFailure(result),
-    );
+    const hasBlockingValidationFailures = this.hasBlockingValidationFailures(input.validationResults);
     if (input.headless && hasBlockingValidationFailures) {
       logger.warn('Skipping real draft PR creation because validation failed in headless mode.');
       return {
@@ -1144,11 +1185,82 @@ export class AgentOrchestrator {
     }).join('; ');
   }
 
+  private hasBlockingValidationFailures(results: TestResult[]): boolean {
+    return results.some((result) => !result.passed && !this.isInfrastructureValidationFailure(result));
+  }
+
   private isInfrastructureValidationFailure(result: TestResult): boolean {
     const output = result.output.toLowerCase();
     return result.exitCode === 127 ||
       output.includes('command not found') ||
       output.includes('not recognized as an internal or external command');
+  }
+
+  private async attemptValidationRepair(input: {
+    issue: RankedIssue;
+    workspace: RepoWorkspaceContext;
+    patchDraft: string;
+    changedFiles: string[];
+    validationResults: TestResult[];
+  }): Promise<{ changedFiles: string[]; validationResults: TestResult[] } | null> {
+    if (input.workspace.validationCommands.length === 0) {
+      return null;
+    }
+
+    ui.callout({
+      label: 'OpenMeta Agent',
+      title: 'Validation repair pass triggered',
+      subtitle: 'Blocking validation failures were found, so OpenMeta will attempt one constrained repair pass before continuing.',
+      lines: [
+        `Failures: ${this.formatValidationSummary(input.validationResults)}`,
+      ],
+      tone: 'warning',
+    });
+
+    const currentFiles = workspaceService.readWorkspaceFiles(input.workspace.workspacePath, input.changedFiles);
+    const repairDraft = await ui.task({
+      title: 'Generating validation repair patch',
+      doneMessage: 'Validation repair patch generated',
+      failedMessage: 'Validation repair patch failed',
+      tone: 'info',
+    }, async () => llmService.generateImplementationRepairDraft(
+      input.issue,
+      input.patchDraft,
+      input.validationResults,
+      currentFiles,
+    ));
+
+    if (repairDraft.fileChanges.length === 0) {
+      logger.warn('Validation repair pass did not produce any additional safe file edits.');
+      return null;
+    }
+
+    const repairedFiles = await ui.task({
+      title: `Applying ${repairDraft.fileChanges.length} repair edit(s)`,
+      doneMessage: 'Validation repair edits applied',
+      failedMessage: 'Validation repair edits failed to apply',
+      tone: 'info',
+    }, async () => workspaceService.applyGeneratedChanges(input.workspace.workspacePath, repairDraft.fileChanges));
+
+    if (repairedFiles.length === 0) {
+      logger.warn('Validation repair pass produced no effective file changes.');
+      return null;
+    }
+
+    const validationResults = await ui.task({
+      title: 'Re-running validation after repair',
+      doneMessage: 'Repair validation complete',
+      failedMessage: 'Repair validation finished with issues',
+      tone: 'info',
+    }, async () => workspaceService.runValidationCommands(
+      input.workspace.workspacePath,
+      input.workspace.validationCommands.slice(0, 3),
+    ));
+
+    return {
+      changedFiles: [...new Set([...input.changedFiles, ...repairedFiles])],
+      validationResults,
+    };
   }
 
   private countValidationStates(results: TestResult[]): { passed: number; failed: number; unavailable: number } {

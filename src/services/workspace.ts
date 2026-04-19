@@ -7,6 +7,7 @@ import type {
   GeneratedFileChange,
   RankedIssue,
   RepoMemory,
+  RepoFileSnippet,
   RepoWorkspaceContext,
   TestCommand,
   TestResult,
@@ -25,6 +26,7 @@ const EXCLUDED_DIRS = new Set([
 
 const MAX_DISCOVERED_FILES = 250;
 const MAX_SNIPPET_CHARS = 8000;
+type ExecutionMode = 'interactive' | 'headless';
 
 function sanitizeRepoName(repoFullName: string): string {
   return repoFullName.replace(/\//g, '__');
@@ -47,6 +49,7 @@ export class WorkspaceService {
     issue: RankedIssue,
     memory: RepoMemory,
     runChecks: boolean,
+    executionMode: ExecutionMode = 'interactive',
   ): Promise<RepoWorkspaceContext> {
     const workspacePath = this.getWorkspacePath(issue.repoFullName);
     const repoUrl = `https://github.com/${issue.repoFullName}.git`;
@@ -62,7 +65,7 @@ export class WorkspaceService {
     const defaultBranch = await this.detectDefaultBranch(git);
     const status = await git.status();
     const workspaceDirty = status.files.length > 0;
-    const branchName = workspaceDirty ? undefined : `openmeta/${issue.number}-${slugify(issue.title)}`;
+    const branchName = workspaceDirty ? undefined : await this.createWorkspaceBranchName(git, issue);
 
     if (!workspaceDirty && branchName) {
       await git.checkout(defaultBranch);
@@ -72,11 +75,7 @@ export class WorkspaceService {
         logger.debug('Unable to fast-forward workspace before branch creation', error);
       }
 
-      try {
-        await git.checkoutLocalBranch(branchName);
-      } catch {
-        await git.checkout(branchName);
-      }
+      await git.checkoutLocalBranch(branchName);
     }
 
     const topLevelFiles = readdirSync(workspacePath).slice(0, 50);
@@ -87,7 +86,9 @@ export class WorkspaceService {
       content: this.readSnippet(join(workspacePath, path)),
     }));
     const testCommands = this.detectTestCommands(workspacePath);
-    const testResults = runChecks ? this.runTestCommands(workspacePath, testCommands.slice(0, 3)) : [];
+    const { commands: validationCommands, warnings: validationWarnings } =
+      this.selectValidationCommands(testCommands, executionMode);
+    const testResults = runChecks ? this.runTestCommands(workspacePath, validationCommands.slice(0, 3)) : [];
 
     return {
       workspacePath,
@@ -98,6 +99,8 @@ export class WorkspaceService {
       candidateFiles,
       snippets,
       testCommands,
+      validationCommands,
+      validationWarnings,
       testResults,
     };
   }
@@ -135,6 +138,28 @@ export class WorkspaceService {
     return this.runTestCommands(workspacePath, commands);
   }
 
+  readWorkspaceFiles(workspacePath: string, filePaths: string[]): RepoFileSnippet[] {
+    const rootPath = resolve(workspacePath);
+
+    return filePaths.flatMap((filePath) => {
+      const relativePath = filePath.replace(/^\/+/, '').trim();
+      if (!relativePath) {
+        return [];
+      }
+
+      const targetPath = resolve(rootPath, relativePath);
+      if (targetPath !== rootPath && !targetPath.startsWith(`${rootPath}${sep}`)) {
+        logger.warn(`Skipping unsafe workspace read outside the repository root: ${filePath}`);
+        return [];
+      }
+
+      return [{
+        path: relativePath,
+        content: this.readSnippet(targetPath),
+      }];
+    });
+  }
+
   private async detectDefaultBranch(git: SimpleGit): Promise<string> {
     try {
       const branchReference = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
@@ -153,6 +178,16 @@ export class WorkspaceService {
 
       return branches.current || 'main';
     }
+  }
+
+  private async createWorkspaceBranchName(git: SimpleGit, issue: RankedIssue): Promise<string> {
+    const baseBranchName = `openmeta/${issue.number}-${slugify(issue.title) || 'issue'}`;
+    const localBranches = await git.branchLocal();
+    if (!localBranches.all.includes(baseBranchName)) {
+      return baseBranchName;
+    }
+
+    return `${baseBranchName}-${Date.now()}`;
   }
 
   private discoverFiles(root: string): string[] {
@@ -271,32 +306,70 @@ export class WorkspaceService {
         const scripts = packageJson.scripts ?? {};
         const scriptRunner = this.detectPackageScriptRunner(workspacePath, packageJson.packageManager);
 
-        if (scripts['test']) commands.push({ command: this.buildPackageScriptCommand(scriptRunner, 'test'), reason: `Detected package.json test script (${scriptRunner})` });
-        if (scripts['lint']) commands.push({ command: this.buildPackageScriptCommand(scriptRunner, 'lint'), reason: `Detected package.json lint script (${scriptRunner})` });
-        if (scripts['typecheck']) commands.push({ command: this.buildPackageScriptCommand(scriptRunner, 'typecheck'), reason: `Detected package.json typecheck script (${scriptRunner})` });
-        if (scripts['build']) commands.push({ command: this.buildPackageScriptCommand(scriptRunner, 'build'), reason: `Detected package.json build script (${scriptRunner})` });
+        if (scripts['test']) commands.push({
+          command: this.buildPackageScriptCommand(scriptRunner, 'test'),
+          reason: `Detected package.json test script (${scriptRunner})`,
+          source: 'repo-script',
+        });
+        if (scripts['lint']) commands.push({
+          command: this.buildPackageScriptCommand(scriptRunner, 'lint'),
+          reason: `Detected package.json lint script (${scriptRunner})`,
+          source: 'repo-script',
+        });
+        if (scripts['typecheck']) commands.push({
+          command: this.buildPackageScriptCommand(scriptRunner, 'typecheck'),
+          reason: `Detected package.json typecheck script (${scriptRunner})`,
+          source: 'repo-script',
+        });
+        if (scripts['build']) commands.push({
+          command: this.buildPackageScriptCommand(scriptRunner, 'build'),
+          reason: `Detected package.json build script (${scriptRunner})`,
+          source: 'repo-script',
+        });
       } catch (error) {
         logger.debug('Unable to parse package.json for test command detection', error);
       }
     }
 
     if (existsSync(cargoPath)) {
-      commands.push({ command: 'cargo test', reason: 'Detected Cargo.toml' });
+      commands.push({ command: 'cargo test', reason: 'Detected Cargo.toml', source: 'tool-default' });
     }
 
     if (existsSync(goModPath)) {
-      commands.push({ command: 'go test ./...', reason: 'Detected go.mod' });
+      commands.push({ command: 'go test ./...', reason: 'Detected go.mod', source: 'tool-default' });
     }
 
     if (existsSync(pyprojectPath)) {
-      commands.push({ command: 'pytest', reason: 'Detected pyproject.toml' });
+      commands.push({ command: 'pytest', reason: 'Detected pyproject.toml', source: 'tool-default' });
     }
 
     if (existsSync(makefilePath)) {
-      commands.push({ command: 'make test', reason: 'Detected Makefile' });
+      commands.push({ command: 'make test', reason: 'Detected Makefile', source: 'repo-script' });
     }
 
     return commands.filter((item, index, list) => list.findIndex((candidate) => candidate.command === item.command) === index);
+  }
+
+  private selectValidationCommands(
+    commands: TestCommand[],
+    executionMode: ExecutionMode,
+  ): { commands: TestCommand[]; warnings: string[] } {
+    if (executionMode !== 'headless') {
+      return {
+        commands: commands.slice(0, 3),
+        warnings: [],
+      };
+    }
+
+    const selected = commands.filter((command) => command.source === 'tool-default').slice(0, 3);
+    const warnings = commands
+      .filter((command) => command.source === 'repo-script')
+      .map((command) => `Skipped ${command.command} during headless validation because it comes from repository-defined scripts.`);
+
+    return {
+      commands: selected,
+      warnings,
+    };
   }
 
   private detectPackageScriptRunner(workspacePath: string, packageManager?: string): 'bun' | 'pnpm' | 'yarn' | 'npm' {
@@ -346,12 +419,19 @@ export class WorkspaceService {
 
   private runTestCommands(workspacePath: string, commands: TestCommand[]): TestResult[] {
     return commands.map((item) => {
-      const result = spawnSync(item.command, {
-        cwd: workspacePath,
-        encoding: 'utf-8',
-        shell: true,
-        timeout: 120000,
-      });
+      const toolDefault = this.resolveToolDefaultCommand(item);
+      const result = toolDefault
+        ? spawnSync(toolDefault.command, toolDefault.args, {
+          cwd: workspacePath,
+          encoding: 'utf-8',
+          timeout: 120000,
+        })
+        : spawnSync(item.command, {
+          cwd: workspacePath,
+          encoding: 'utf-8',
+          shell: true,
+          timeout: 120000,
+        });
 
       const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim().slice(0, 2000);
       return {
@@ -361,6 +441,23 @@ export class WorkspaceService {
         output,
       };
     });
+  }
+
+  private resolveToolDefaultCommand(command: TestCommand): { command: string; args: string[] } | null {
+    if (command.source !== 'tool-default') {
+      return null;
+    }
+
+    switch (command.command) {
+      case 'cargo test':
+        return { command: 'cargo', args: ['test'] };
+      case 'go test ./...':
+        return { command: 'go', args: ['test', './...'] };
+      case 'pytest':
+        return { command: 'pytest', args: [] };
+      default:
+        return null;
+    }
   }
 }
 

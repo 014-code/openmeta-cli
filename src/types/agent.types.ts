@@ -22,6 +22,7 @@ export interface RankedIssue extends MatchedIssue {
 export interface TestCommand {
   command: string;
   reason: string;
+  source: 'tool-default' | 'repo-script';
 }
 
 export interface TestResult {
@@ -56,6 +57,8 @@ export interface RepoWorkspaceContext {
   candidateFiles: string[];
   snippets: RepoFileSnippet[];
   testCommands: TestCommand[];
+  validationCommands: TestCommand[];
+  validationWarnings: string[];
   testResults: TestResult[];
 }
 

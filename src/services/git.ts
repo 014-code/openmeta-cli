@@ -16,6 +16,11 @@ export interface FileWriteRequest {
   content: string;
 }
 
+export interface PublishOptions {
+  branchName?: string;
+  baseBranch?: string;
+}
+
 export class GitService {
   private git: SimpleGit | null = null;
   private repoPath: string = '';
@@ -58,13 +63,17 @@ export class GitService {
     }
   }
 
-  async writeAndPublish(files: FileWriteRequest[], commitMessage: string): Promise<GitPublishResult | null> {
+  async writeAndPublish(
+    files: FileWriteRequest[],
+    commitMessage: string,
+    options: PublishOptions = {},
+  ): Promise<GitPublishResult | null> {
     if (!this.git) {
       throw new Error('Git service not initialized');
     }
 
     try {
-      const branch = await this.ensureActiveBranch();
+      const branch = await this.ensurePublishBranch(options);
 
       for (const file of files) {
         const filePath = join(this.repoPath, file.path);
@@ -117,30 +126,56 @@ export class GitService {
     return status.files.length > 0;
   }
 
-  private async ensureActiveBranch(): Promise<string> {
+  private async ensurePublishBranch(options: PublishOptions): Promise<string> {
     if (!this.git) {
       throw new Error('Git service not initialized');
     }
 
-    const preferredBranch = 'main';
-    const status = await this.git.status();
-    if (status.current) {
-      return status.current;
+    const branchName = options.branchName || 'main';
+    const baseBranch = options.baseBranch || 'main';
+    const localBranches = await this.git.branchLocal();
+
+    if (localBranches.all.includes(branchName)) {
+      await this.git.checkout(branchName);
+      return branchName;
     }
 
-    const branches = await this.git.branchLocal();
-    if (branches.all.includes(preferredBranch)) {
-      await this.git.checkout(preferredBranch);
-      return preferredBranch;
+    await this.checkoutBaseBranch(baseBranch, localBranches.all);
+
+    try {
+      await this.git.checkoutLocalBranch(branchName);
+    } catch {
+      await this.git.checkout(['-B', branchName]);
+    }
+
+    return branchName;
+  }
+
+  private async checkoutBaseBranch(baseBranch: string, localBranches: string[]): Promise<void> {
+    if (!this.git) {
+      throw new Error('Git service not initialized');
+    }
+
+    if (localBranches.includes(baseBranch)) {
+      await this.git.checkout(baseBranch);
+      return;
     }
 
     try {
-      await this.git.checkoutLocalBranch(preferredBranch);
-    } catch {
-      await this.git.checkout(['-B', preferredBranch]);
+      await this.git.fetch('origin', baseBranch);
+      await this.git.checkout(['-B', baseBranch, `origin/${baseBranch}`]);
+      return;
+    } catch (error) {
+      logger.debug(`Unable to align local repository with origin/${baseBranch} before publishing`, error);
     }
 
-    return preferredBranch;
+    const status = await this.git.status();
+    if (status.current) {
+      await this.git.checkout(status.current);
+      return;
+    }
+
+    await this.git.checkout(['-B', baseBranch]);
   }
 }
 

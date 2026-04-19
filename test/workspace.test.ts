@@ -92,6 +92,23 @@ describe('workspaceService.detectTestCommands', () => {
     expect(commands.map((command) => command.command)).toContain('bun run build');
   });
 
+  test('skips repository-defined validation scripts in headless mode', () => {
+    const commands = [
+      { command: 'bun run test', reason: 'Detected package.json test script (bun)', source: 'repo-script' as const },
+      { command: 'pytest', reason: 'Detected pyproject.toml', source: 'tool-default' as const },
+    ];
+
+    const selected = (workspaceService as unknown as {
+      selectValidationCommands: (
+        commands: Array<{ command: string; reason: string; source: 'tool-default' | 'repo-script' }>,
+        mode: 'interactive' | 'headless',
+      ) => { commands: Array<{ command: string }>; warnings: string[] };
+    }).selectValidationCommands(commands, 'headless');
+
+    expect(selected.commands.map((command) => command.command)).toEqual(['pytest']);
+    expect(selected.warnings[0]).toContain('Skipped bun run test during headless validation');
+  });
+
   test('prioritizes file paths explicitly referenced in the issue body', () => {
     const workspacePath = makeWorkspace();
     mkdirSync(join(workspacePath, 'src', 'components'), { recursive: true });

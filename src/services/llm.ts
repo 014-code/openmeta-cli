@@ -4,8 +4,10 @@ import type {
   ImplementationDraft,
   MatchedIssue,
   RankedIssue,
+  RepoFileSnippet,
   RepoMemory,
   RepoWorkspaceContext,
+  TestResult,
   UserProfile,
 } from '../types/index.js';
 import { logger } from '../infra/logger.js';
@@ -18,6 +20,7 @@ import {
   DAILY_DIARY_GENERATE_PROMPT,
   PATCH_DRAFT_PROMPT,
   PR_DRAFT_PROMPT,
+  VALIDATION_REPAIR_PROMPT,
 } from '../infra/prompt-templates.js';
 
 export class LLMService {
@@ -102,6 +105,8 @@ Repo Stars: ${i.repoStars}`
       `Workspace Dirty: ${workspace.workspaceDirty}`,
       `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
       `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
+      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
+      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
       'Snippets:',
       ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
     ].join('\n\n');
@@ -159,6 +164,7 @@ Repo Stars: ${i.repoStars}`
   ): Promise<string> {
     const validationContext = [
       `Detected Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
+      `Runnable Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
       `Baseline Results: ${workspace.testResults.length > 0 ? workspace.testResults.map((result) => `${result.command} => ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`).join('; ') : 'not executed'}`,
     ].join('\n');
 
@@ -169,6 +175,43 @@ Repo Stars: ${i.repoStars}`
     });
 
     return await this.chat(prompt);
+  }
+
+  async generateImplementationRepairDraft(
+    issue: RankedIssue,
+    patchDraft: string,
+    validationResults: TestResult[],
+    currentFiles: RepoFileSnippet[],
+  ): Promise<ImplementationDraft> {
+    const validationFailures = validationResults.length > 0
+      ? validationResults
+        .filter((result) => !result.passed)
+        .map((result) => `${result.command} | exit=${result.exitCode ?? 'n/a'}\n${result.output}`.trim())
+        .join('\n\n---\n\n')
+      : 'No validation failures were provided.';
+
+    const prompt = fillPrompt(VALIDATION_REPAIR_PROMPT, {
+      issueContext: this.formatRankedIssue(issue),
+      patchDraft,
+      validationFailures,
+      currentFiles: currentFiles.length > 0
+        ? currentFiles.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
+        : 'No current files were provided.',
+    });
+
+    const content = await this.chat(prompt, { temperature: 0.1 });
+
+    try {
+      return this.parseImplementationDraft(content);
+    } catch (error) {
+      logger.debug('Validation repair draft parsing failed, attempting repair', error);
+
+      const repairPrompt = fillPrompt(CODE_CHANGE_REPAIR_PROMPT, {
+        invalidResponse: content.slice(0, 12000),
+      });
+      const repairedContent = await this.chat(repairPrompt, { temperature: 0 });
+      return this.parseImplementationDraft(repairedContent);
+    }
   }
 
   private async chat(prompt: string, options: { temperature?: number } = {}): Promise<string> {

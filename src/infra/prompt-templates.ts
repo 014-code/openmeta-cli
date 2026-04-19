@@ -129,6 +129,40 @@ Previous response:
 {{invalidResponse}}
 `;
 
+export const VALIDATION_REPAIR_PROMPT = `You are OpenMeta, an autonomous open source contribution agent.
+
+Repair the generated implementation after validation failures.
+
+Requirements:
+1. Return only the machine-readable file block format below. No commentary.
+2. Only modify files that are already in the Current Files section unless a new file is strictly required.
+3. Focus on the concrete validation failures first. Do not rewrite unrelated code.
+4. Keep the patch minimal and high confidence.
+5. If the validation output is insufficient for a safe repair, return exactly:
+SUMMARY: Insufficient context for a safe code patch.
+
+Required output format:
+SUMMARY: <short summary>
+FILE: relative/path/to/file
+REASON: <why this file changes>
+\`\`\`<language>
+<full updated file content>
+\`\`\`
+END_FILE
+
+Issue:
+{{issueContext}}
+
+Original Patch Draft:
+{{patchDraft}}
+
+Validation Failures:
+{{validationFailures}}
+
+Current Files:
+{{currentFiles}}
+`;
+
 export const PR_DRAFT_PROMPT = `You are OpenMeta, an autonomous open source contribution agent.
 
 Write a pull request draft in Markdown for the selected issue.
