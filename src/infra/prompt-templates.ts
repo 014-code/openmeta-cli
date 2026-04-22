@@ -65,36 +65,29 @@ Repo Memory:
 
 export const CODE_CHANGE_PROMPT = `You are OpenMeta, an autonomous open source contribution agent.
 
-Generate a concrete implementation patch in an exact machine-readable file block format.
+Generate a concrete implementation patch in strict JSON.
 
 Requirements:
-1. Return only the format below. No intro text. No outro text.
+1. Return one valid JSON object only. No markdown. No commentary.
 2. Keep the change set minimal and high confidence.
 3. Prefer editing only the provided editable files. Add a new file only when clearly necessary.
-4. Each file block must contain the full final file content after the edit.
+4. Each file change must contain the full final file content after the edit.
 5. Do not delete files.
-6. If context is insufficient for a safe implementation, return exactly:
-SUMMARY: Insufficient context for a safe code patch.
+6. If context is insufficient for a safe implementation, return:
+{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}
 7. Preserve the project's apparent style and formatting.
 
-Output format:
-SUMMARY: <short summary>
-FILE: relative/path/to/file
-REASON: <why this file changes>
-\`\`\`<language>
-<full updated file content>
-\`\`\`
-END_FILE
-
-Repeat the FILE/REASON/code block/END_FILE block for every changed file.
-Rules for the output format:
-1. The first line must start with SUMMARY:
-2. Every changed file must start with FILE:
-3. Every FILE block must include REASON:
-4. Every FILE block must end with END_FILE
-5. Use fenced code blocks for file content, so TypeScript/TSX/JSX does not need JSON escaping
-6. Do not include markdown headings or bullet lists
-7. Preserve the project's apparent style and formatting.
+Output schema:
+{
+  "summary": "short summary",
+  "fileChanges": [
+    {
+      "path": "relative/path/to/file",
+      "reason": "why this file changes",
+      "content": "full final file content"
+    }
+  ]
+}
 
 Issue:
 {{issueContext}}
@@ -108,22 +101,25 @@ Editable Files:
 
 export const CODE_CHANGE_REPAIR_PROMPT = `You are OpenMeta, an autonomous open source contribution agent.
 
-The previous implementation response was not parseable. Reformat it into the exact machine-readable file block format below.
+The previous implementation response was not parseable or did not match the required schema. Reformat it into strict JSON.
 
-Required format:
-SUMMARY: <short summary>
-FILE: relative/path/to/file
-REASON: <why this file changes>
-\`\`\`<language>
-<full updated file content>
-\`\`\`
-END_FILE
+Required schema:
+{
+  "summary": "short summary",
+  "fileChanges": [
+    {
+      "path": "relative/path/to/file",
+      "reason": "why this file changes",
+      "content": "full final file content"
+    }
+  ]
+}
 
 Rules:
-1. Return only the reformatted result. No commentary.
+1. Return only one valid JSON object. No commentary.
 2. Preserve the intended edits from the previous response.
-3. If the previous response is unusable, return exactly:
-SUMMARY: Insufficient context for a safe code patch.
+3. If the previous response is unusable, return:
+{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}
 
 Previous response:
 {{invalidResponse}}
@@ -134,21 +130,24 @@ export const VALIDATION_REPAIR_PROMPT = `You are OpenMeta, an autonomous open so
 Repair the generated implementation after validation failures.
 
 Requirements:
-1. Return only the machine-readable file block format below. No commentary.
+1. Return one valid JSON object only. No commentary.
 2. Only modify files that are already in the Current Files section unless a new file is strictly required.
 3. Focus on the concrete validation failures first. Do not rewrite unrelated code.
 4. Keep the patch minimal and high confidence.
-5. If the validation output is insufficient for a safe repair, return exactly:
-SUMMARY: Insufficient context for a safe code patch.
+5. If the validation output is insufficient for a safe repair, return:
+{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}
 
-Required output format:
-SUMMARY: <short summary>
-FILE: relative/path/to/file
-REASON: <why this file changes>
-\`\`\`<language>
-<full updated file content>
-\`\`\`
-END_FILE
+Required schema:
+{
+  "summary": "short summary",
+  "fileChanges": [
+    {
+      "path": "relative/path/to/file",
+      "reason": "why this file changes",
+      "content": "full final file content"
+    }
+  ]
+}
 
 Issue:
 {{issueContext}}

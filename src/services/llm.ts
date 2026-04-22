@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+import { z } from 'zod';
+import { ImplementationDraftSchema } from '../contracts/index.js';
 import type {
   GitHubIssue,
   ImplementationDraft,
@@ -142,19 +144,12 @@ Repo Stars: ${i.repoStars}`
       editableFiles,
     });
 
-    const content = await this.chat(prompt, { temperature: 0.1 });
-
-    try {
-      return this.parseImplementationDraft(content);
-    } catch (error) {
-      logger.debug('Primary implementation draft parsing failed, attempting repair', error);
-
-      const repairPrompt = fillPrompt(CODE_CHANGE_REPAIR_PROMPT, {
-        invalidResponse: content.slice(0, 12000),
-      });
-      const repairedContent = await this.chat(repairPrompt, { temperature: 0 });
-      return this.parseImplementationDraft(repairedContent);
-    }
+    return this.generateStructuredOutput({
+      prompt,
+      parser: this.parseImplementationDraft.bind(this),
+      repairPrompt: CODE_CHANGE_REPAIR_PROMPT,
+      temperature: 0.1,
+    });
   }
 
   async generatePrDraft(
@@ -199,19 +194,12 @@ Repo Stars: ${i.repoStars}`
         : 'No current files were provided.',
     });
 
-    const content = await this.chat(prompt, { temperature: 0.1 });
-
-    try {
-      return this.parseImplementationDraft(content);
-    } catch (error) {
-      logger.debug('Validation repair draft parsing failed, attempting repair', error);
-
-      const repairPrompt = fillPrompt(CODE_CHANGE_REPAIR_PROMPT, {
-        invalidResponse: content.slice(0, 12000),
-      });
-      const repairedContent = await this.chat(repairPrompt, { temperature: 0 });
-      return this.parseImplementationDraft(repairedContent);
-    }
+    return this.generateStructuredOutput({
+      prompt,
+      parser: this.parseImplementationDraft.bind(this),
+      repairPrompt: CODE_CHANGE_REPAIR_PROMPT,
+      temperature: 0.1,
+    });
   }
 
   private async chat(prompt: string, options: { temperature?: number } = {}): Promise<string> {
@@ -234,6 +222,30 @@ Repo Stars: ${i.repoStars}`
     } catch (error) {
       logger.debug('LLM chat failed', error);
       throw new Error('The LLM request failed. Please verify your provider, model, and API key.');
+    }
+  }
+
+  private async generateStructuredOutput<T>(input: {
+    prompt: string;
+    parser: (content: string) => T;
+    repairPrompt?: string;
+    temperature?: number;
+  }): Promise<T> {
+    const content = await this.chat(input.prompt, { temperature: input.temperature });
+
+    try {
+      return input.parser(content);
+    } catch (error) {
+      if (!input.repairPrompt) {
+        throw error;
+      }
+
+      logger.debug('Structured output parsing failed, attempting repair', error);
+      const repairedContent = await this.chat(fillPrompt(input.repairPrompt, {
+        invalidResponse: content.slice(0, 12000),
+      }), { temperature: 0 });
+
+      return input.parser(repairedContent);
     }
   }
 
@@ -285,76 +297,29 @@ Repo Stars: ${i.repoStars}`
   }
 
   private parseImplementationDraft(content: string): ImplementationDraft {
-    const jsonDraft = this.tryParseImplementationJson(content);
-    if (jsonDraft) {
-      return jsonDraft;
-    }
-
-    const blockDraft = this.tryParseImplementationBlocks(content);
-    if (blockDraft.summary || blockDraft.fileChanges.length > 0) {
-      return blockDraft;
-    }
-
-    throw new Error('LLM did not return a parseable implementation draft.');
+    return this.parseStructuredJson(content, ImplementationDraftSchema);
   }
 
-  private tryParseImplementationJson(content: string): ImplementationDraft | null {
+  private parseStructuredJson<T>(content: string, schema: z.ZodType<T>): T {
+    let payload: unknown;
+
     try {
-      const payload = this.extractJsonObject(content);
-      const parsed = JSON.parse(payload) as Partial<ImplementationDraft>;
-      return this.normalizeImplementationDraft(parsed);
+      payload = JSON.parse(this.extractJsonObject(content));
     } catch {
-      return null;
-    }
-  }
-
-  private tryParseImplementationBlocks(content: string): ImplementationDraft {
-    const normalized = content.replace(/\r\n/g, '\n').trim();
-    const summaryMatch = normalized.match(/^SUMMARY:\s*(.+)$/im);
-    const blockPattern = /^\s*FILE:\s*([^\n]+)\n\s*REASON:\s*([^\n]*)\n\s*```[^\n]*\n([\s\S]*?)\n\s*```\n\s*END_FILE/gim;
-    const fileChanges: ImplementationDraft['fileChanges'] = [];
-
-    for (const match of normalized.matchAll(blockPattern)) {
-      const [, path = '', reason = '', fileContent = ''] = match;
-      const trimmedPath = path.trim();
-      const trimmedContent = fileContent;
-
-      if (!trimmedPath || !trimmedContent) {
-        continue;
-      }
-
-      fileChanges.push({
-        path: trimmedPath,
-        reason: reason.trim(),
-        content: trimmedContent,
-      });
+      throw new Error('LLM did not return a parseable JSON object.');
     }
 
-    return {
-      summary: summaryMatch?.[1]?.trim() || '',
-      fileChanges,
-    };
-  }
+    const result = schema.safeParse(payload);
+    if (result.success) {
+      return result.data;
+    }
 
-  private normalizeImplementationDraft(draft: Partial<ImplementationDraft>): ImplementationDraft {
-    const normalizedFileChanges = Array.isArray(draft.fileChanges)
-      ? draft.fileChanges
-        .map((item) => ({
-          path: typeof item?.path === 'string' ? item.path.trim() : '',
-          reason: typeof item?.reason === 'string' ? item.reason.trim() : '',
-          content: typeof item?.content === 'string' ? item.content : '',
-        }))
-        .filter((item) => item.path.length > 0 && item.content.length > 0)
-      : [];
+    const issueSummary = result.error.issues
+      .slice(0, 3)
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('; ');
 
-    const dedupedFileChanges = [...new Map(
-      normalizedFileChanges.map((item) => [item.path, item]),
-    ).values()];
-
-    return {
-      summary: typeof draft.summary === 'string' ? draft.summary.trim() : '',
-      fileChanges: dedupedFileChanges,
-    };
+    throw new Error(`LLM output failed schema validation. ${issueSummary}`);
   }
 
   private extractJsonObject(content: string): string {

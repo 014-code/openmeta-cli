@@ -29,9 +29,9 @@ describe('LLMService implementation draft parsing', () => {
     expect(draft.fileChanges[0]?.path).toBe('src/button.tsx');
   });
 
-  test('parses fenced JSON responses and drops invalid file entries', () => {
+  test('rejects fenced JSON responses that fail schema validation', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
-    const draft = service.parseImplementationDraft(`
+    expect(() => service.parseImplementationDraft(`
       \`\`\`json
       {
         "summary": "Mixed output",
@@ -49,24 +49,24 @@ describe('LLMService implementation draft parsing', () => {
         ]
       }
       \`\`\`
-    `);
-
-    expect(draft.fileChanges).toHaveLength(1);
-    expect(draft.fileChanges[0]?.reason).toBe('Valid');
+    `)).toThrow('LLM output failed schema validation.');
   });
 
-  test('parses file block responses with raw tsx content', () => {
+  test('parses fenced JSON responses with raw tsx content', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
     const draft = service.parseImplementationDraft(`
-      SUMMARY: Add aria-label support
-      FILE: src/components/IconButton.tsx
-      REASON: Add accessible label handling for icon-only buttons
-      \`\`\`tsx
-      export function IconButton() {
-        return <button aria-label="Open menu" />;
+      \`\`\`json
+      {
+        "summary": "Add aria-label support",
+        "fileChanges": [
+          {
+            "path": "src/components/IconButton.tsx",
+            "reason": "Add accessible label handling for icon-only buttons",
+            "content": "export function IconButton() {\\n  return <button aria-label=\\"Open menu\\" />;\\n}"
+          }
+        ]
       }
       \`\`\`
-      END_FILE
     `);
 
     expect(draft.summary).toBe('Add aria-label support');
@@ -103,7 +103,7 @@ describe('LLMService implementation draft parsing', () => {
   test('throws when implementation output is not parseable', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
     expect(() => service.parseImplementationDraft('unstructured output')).toThrow(
-      'LLM did not return a parseable implementation draft.',
+      'LLM did not return a parseable JSON object.',
     );
   });
 });
