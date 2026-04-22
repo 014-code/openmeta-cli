@@ -44,14 +44,34 @@ User-supplied code snippets: {{userCodeSnippets}}`;
 
 export const PATCH_DRAFT_PROMPT = `You are OpenMeta, an autonomous open source contribution agent.
 
-Generate a precise patch draft in Markdown for the selected issue.
+Generate a precise patch draft in strict JSON for the selected issue.
 
 Requirements:
-1. Output sections in this exact order: Goal, Target Files, Proposed Changes, Risks, Validation Notes;
-2. In Target Files, list 3-6 likely files with why they matter;
-3. In Proposed Changes, describe file-level edits concretely enough that an engineer could implement them;
-4. Keep the plan minimal and high-confidence. If context is insufficient, say so explicitly;
-5. No marketing language, no extra headers outside the required sections.
+1. Return one valid JSON object only. No markdown. No commentary.
+2. Keep the plan minimal and high-confidence.
+3. Target files must be concrete and repository-relative.
+4. Proposed changes must describe specific implementation steps.
+5. Risks and validation notes must be honest and concrete.
+
+Output schema:
+{
+  "goal": "what the patch should achieve",
+  "targetFiles": [
+    {
+      "path": "relative/path/to/file",
+      "reason": "why this file matters"
+    }
+  ],
+  "proposedChanges": [
+    {
+      "title": "short step title",
+      "details": "specific implementation details",
+      "files": ["relative/path/to/file"]
+    }
+  ],
+  "risks": ["concrete risk"],
+  "validationNotes": ["concrete validation note"]
+}
 
 Issue:
 {{issueContext}}

@@ -4,6 +4,7 @@ import {
   createInboxItem,
   createMatchedIssue,
   createMemory,
+  createPatchDraft,
   createProofRecord,
   createRankedIssue,
   createWorkspace,
@@ -26,7 +27,7 @@ describe('contentService', () => {
       createRankedIssue(),
       createWorkspace(),
       createMemory(),
-      'Patch Draft Body',
+      createPatchDraft(),
       'PR Draft Body',
     );
 
@@ -37,8 +38,20 @@ describe('contentService', () => {
     expect(markdown).toContain('- `bun test` | Detected Bun tests | repo-script');
     expect(markdown).toContain('## Runnable Validation Commands');
     expect(markdown).toContain('## Validation Safety Notes');
-    expect(markdown).toContain('Patch Draft Body');
+    expect(markdown).toContain('## Patch Draft');
+    expect(markdown).toContain('## Goal');
+    expect(markdown).toContain('Add accessible labels to icon-only buttons');
     expect(markdown).toContain('PR Draft Body');
+  });
+
+  test('renders structured patch drafts as markdown', () => {
+    const markdown = contentService.formatPatchDraftMarkdown(createPatchDraft());
+
+    expect(markdown).toContain('# Patch Draft');
+    expect(markdown).toContain('## Target Files');
+    expect(markdown).toContain('`src/components/IconButton.tsx`');
+    expect(markdown).toContain('### Update button API');
+    expect(markdown).toContain('## Validation Notes');
   });
 
   test('formats inbox and proof-of-work markdown summaries', () => {

@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { Octokit } from '@octokit/rest';
 import { simpleGit, type SimpleGit } from 'simple-git';
+import type { PatchDraft } from '../contracts/index.js';
 import type {
   AppConfig,
   ContributionAgentResult,
@@ -207,6 +208,7 @@ export class AgentOrchestrator {
       failedMessage: 'PR narrative generation failed',
       tone: 'info',
     }, async () => llmService.generatePrDraft(selectedIssue, patchDraft, workspaceForArtifacts));
+    const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
 
     const contributionPullRequest = await this.submitContributionPullRequestIfPossible({
       config,
@@ -275,7 +277,7 @@ export class AgentOrchestrator {
       this.writeLocalArtifacts({
         artifacts,
         dossier,
-        patchDraft,
+        patchDraftMarkdown,
         prDraft,
         memoryMarkdown: memoryService.renderMarkdown(memory),
         inboxMarkdown: inboxService.renderMarkdown(inboxItems),
@@ -287,7 +289,7 @@ export class AgentOrchestrator {
       config,
       headless,
       issue: selectedIssue,
-      patchDraft,
+      patchDraftMarkdown,
       prDraft,
       dossier,
       memoryMarkdown: memoryService.renderMarkdown(memory),
@@ -791,14 +793,14 @@ export class AgentOrchestrator {
   private writeLocalArtifacts(input: {
     artifacts: ReturnType<AgentOrchestrator['prepareLocalArtifactPaths']>;
     dossier: string;
-    patchDraft: string;
+    patchDraftMarkdown: string;
     prDraft: string;
     memoryMarkdown: string;
     inboxMarkdown: string;
     proofMarkdown: string;
   }): void {
     writeFileSync(input.artifacts.dossierPath, input.dossier, 'utf-8');
-    writeFileSync(input.artifacts.patchDraftPath, input.patchDraft, 'utf-8');
+    writeFileSync(input.artifacts.patchDraftPath, input.patchDraftMarkdown, 'utf-8');
     writeFileSync(input.artifacts.prDraftPath, input.prDraft, 'utf-8');
     writeFileSync(input.artifacts.memoryPath, input.memoryMarkdown, 'utf-8');
     writeFileSync(input.artifacts.inboxPath, input.inboxMarkdown, 'utf-8');
@@ -808,7 +810,7 @@ export class AgentOrchestrator {
   private async generateConcretePatch(
     issue: RankedIssue,
     workspace: RepoWorkspaceContext,
-    patchDraft: string,
+    patchDraft: PatchDraft,
     runChecks: boolean,
   ): Promise<{ changedFiles: string[]; validationResults: TestResult[] }> {
     try {
@@ -902,7 +904,7 @@ export class AgentOrchestrator {
     config: AppConfig;
     headless: boolean;
     issue: RankedIssue;
-    patchDraft: string;
+    patchDraftMarkdown: string;
     prDraft: string;
     dossier: string;
     memoryMarkdown: string;
@@ -932,7 +934,7 @@ export class AgentOrchestrator {
 
     const publishResult = await gitService.writeAndPublish([
       { path: join(artifactRelativeDir, 'dossier.md'), content: input.dossier },
-      { path: join(artifactRelativeDir, 'patch-draft.md'), content: input.patchDraft },
+      { path: join(artifactRelativeDir, 'patch-draft.md'), content: input.patchDraftMarkdown },
       { path: join(artifactRelativeDir, 'pr-draft.md'), content: input.prDraft },
       { path: join('memory', `${input.issue.repoFullName.replace(/\//g, '__')}.md`), content: input.memoryMarkdown },
       { path: 'INBOX.md', content: input.inboxMarkdown },
@@ -1199,7 +1201,7 @@ export class AgentOrchestrator {
   private async attemptValidationRepair(input: {
     issue: RankedIssue;
     workspace: RepoWorkspaceContext;
-    patchDraft: string;
+    patchDraft: PatchDraft;
     changedFiles: string[];
     validationResults: TestResult[];
   }): Promise<{ changedFiles: string[]; validationResults: TestResult[] } | null> {

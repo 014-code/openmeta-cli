@@ -1,3 +1,4 @@
+import type { PatchDraft } from '../contracts/index.js';
 import type {
   ContentType,
   ContributionInboxItem,
@@ -69,11 +70,45 @@ export class ContentService {
     return type === 'research_note' ? 'Research Notes' : 'Development Diary';
   }
 
+  formatPatchDraftMarkdown(draft: PatchDraft): string {
+    const lines = [
+      '# Patch Draft',
+      '',
+      '## Goal',
+      '',
+      draft.goal,
+      '',
+      '## Target Files',
+      '',
+      ...draft.targetFiles.map((file) => `- \`${file.path}\` | ${file.reason}`),
+      '',
+      '## Proposed Changes',
+      '',
+      ...draft.proposedChanges.flatMap((change) => ([
+        `### ${change.title}`,
+        '',
+        change.details,
+        ...(change.files.length > 0 ? ['', `Files: ${change.files.join(', ')}`] : []),
+        '',
+      ])),
+      '## Risks',
+      '',
+      ...(draft.risks.length > 0 ? draft.risks.map((risk) => `- ${risk}`) : ['- None']),
+      '',
+      '## Validation Notes',
+      '',
+      ...(draft.validationNotes.length > 0 ? draft.validationNotes.map((note) => `- ${note}`) : ['- None']),
+      '',
+    ];
+
+    return lines.join('\n');
+  }
+
   formatContributionDossier(
     issue: RankedIssue,
     workspace: RepoWorkspaceContext,
     memory: RepoMemory,
-    patchDraft: string,
+    patchDraft: PatchDraft,
     prDraft: string,
   ): string {
     const lines = [
@@ -137,7 +172,7 @@ export class ContentService {
       '',
       '## Patch Draft',
       '',
-      patchDraft,
+      this.formatPatchDraftMarkdown(patchDraft),
       '',
       '## PR Draft',
       '',

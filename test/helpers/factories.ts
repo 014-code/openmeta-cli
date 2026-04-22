@@ -1,3 +1,4 @@
+import type { PatchDraft } from '../../src/contracts/index.js';
 import type {
   ContributionInboxItem,
   GitHubIssue,
@@ -118,6 +119,37 @@ export function createMemory(overrides: Partial<RepoMemory> = {}): RepoMemory {
         generatedAt: '2026-04-18T08:00:00.000Z',
       },
     ],
+    ...overrides,
+  };
+}
+
+export function createPatchDraft(overrides: Partial<PatchDraft> = {}): PatchDraft {
+  return {
+    goal: 'Add accessible labels to icon-only buttons',
+    targetFiles: [
+      {
+        path: 'src/components/IconButton.tsx',
+        reason: 'Primary component logic for icon-only buttons',
+      },
+      {
+        path: 'src/components/IconButton.test.tsx',
+        reason: 'Coverage for accessibility behavior',
+      },
+    ],
+    proposedChanges: [
+      {
+        title: 'Update button API',
+        details: 'Require an accessible label when the button is rendered without visible text.',
+        files: ['src/components/IconButton.tsx'],
+      },
+      {
+        title: 'Expand test coverage',
+        details: 'Add coverage for icon-only button rendering and label propagation.',
+        files: ['src/components/IconButton.test.tsx'],
+      },
+    ],
+    risks: ['Consumer code may rely on the previous unlabeled icon-only behavior'],
+    validationNotes: ['Run bun test after updating the component and tests'],
     ...overrides,
   };
 }

@@ -1,6 +1,10 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
-import { ImplementationDraftSchema } from '../contracts/index.js';
+import {
+  ImplementationDraftSchema,
+  PatchDraftSchema,
+  type PatchDraft,
+} from '../contracts/index.js';
 import type {
   GitHubIssue,
   ImplementationDraft,
@@ -100,7 +104,7 @@ Repo Stars: ${i.repoStars}`
     return await this.chat(prompt);
   }
 
-  async generatePatchDraft(issue: RankedIssue, workspace: RepoWorkspaceContext, memory: RepoMemory): Promise<string> {
+  async generatePatchDraft(issue: RankedIssue, workspace: RepoWorkspaceContext, memory: RepoMemory): Promise<PatchDraft> {
     const repoContext = [
       `Workspace Path: ${workspace.workspacePath}`,
       `Default Branch: ${workspace.defaultBranch}`,
@@ -126,13 +130,16 @@ Repo Stars: ${i.repoStars}`
       repoMemory,
     });
 
-    return await this.chat(prompt);
+    return this.generateStructuredOutput({
+      prompt,
+      parser: this.parsePatchDraft.bind(this),
+    });
   }
 
   async generateImplementationDraft(
     issue: RankedIssue,
     workspace: RepoWorkspaceContext,
-    patchDraft: string,
+    patchDraft: PatchDraft,
   ): Promise<ImplementationDraft> {
     const editableFiles = workspace.snippets.length > 0
       ? workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
@@ -140,7 +147,7 @@ Repo Stars: ${i.repoStars}`
 
     const prompt = fillPrompt(CODE_CHANGE_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      patchDraft,
+      patchDraft: JSON.stringify(patchDraft, null, 2),
       editableFiles,
     });
 
@@ -154,7 +161,7 @@ Repo Stars: ${i.repoStars}`
 
   async generatePrDraft(
     issue: RankedIssue,
-    patchDraft: string,
+    patchDraft: PatchDraft,
     workspace: RepoWorkspaceContext,
   ): Promise<string> {
     const validationContext = [
@@ -165,7 +172,7 @@ Repo Stars: ${i.repoStars}`
 
     const prompt = fillPrompt(PR_DRAFT_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      patchDraft,
+      patchDraft: JSON.stringify(patchDraft, null, 2),
       validationContext,
     });
 
@@ -174,7 +181,7 @@ Repo Stars: ${i.repoStars}`
 
   async generateImplementationRepairDraft(
     issue: RankedIssue,
-    patchDraft: string,
+    patchDraft: PatchDraft,
     validationResults: TestResult[],
     currentFiles: RepoFileSnippet[],
   ): Promise<ImplementationDraft> {
@@ -187,7 +194,7 @@ Repo Stars: ${i.repoStars}`
 
     const prompt = fillPrompt(VALIDATION_REPAIR_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      patchDraft,
+      patchDraft: JSON.stringify(patchDraft, null, 2),
       validationFailures,
       currentFiles: currentFiles.length > 0
         ? currentFiles.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
@@ -298,6 +305,10 @@ Repo Stars: ${i.repoStars}`
 
   private parseImplementationDraft(content: string): ImplementationDraft {
     return this.parseStructuredJson(content, ImplementationDraftSchema);
+  }
+
+  private parsePatchDraft(content: string): PatchDraft {
+    return this.parseStructuredJson(content, PatchDraftSchema);
   }
 
   private parseStructuredJson<T>(content: string, schema: z.ZodType<T>): T {

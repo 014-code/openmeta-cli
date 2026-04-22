@@ -4,7 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { llmService, workspaceService } from '../src/services/index.js';
-import { createRankedIssue, createWorkspace } from './helpers/factories.js';
+import { createPatchDraft, createRankedIssue, createWorkspace } from './helpers/factories.js';
 
 interface AgentInternals {
   parseDraftPullRequest(prDraft: string, issue: ReturnType<typeof createRankedIssue>): {
@@ -30,7 +30,7 @@ interface AgentInternals {
   generateConcretePatch(
     issue: ReturnType<typeof createRankedIssue>,
     workspace: ReturnType<typeof createWorkspace>,
-    patchDraft: string,
+    patchDraft: ReturnType<typeof createPatchDraft>,
     runChecks: boolean,
   ): Promise<{
     changedFiles: string[];
@@ -178,7 +178,7 @@ describe('AgentOrchestrator draft PR parsing', () => {
           validationWarnings: [],
           testResults: [],
         }),
-        'Patch draft body',
+        createPatchDraft(),
         true,
       );
 
