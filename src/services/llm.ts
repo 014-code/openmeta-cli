@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import {
   ImplementationDraftSchema,
+  IssueMatchListSchema,
   PatchDraftSchema,
   type PatchDraft,
   PullRequestDraftSchema,
@@ -24,6 +25,7 @@ import {
   CODE_CHANGE_REPAIR_PROMPT,
   fillPrompt,
   ISSUE_MATCH_PROMPT,
+  ISSUE_MATCH_REPAIR_PROMPT,
   DAILY_REPORT_GENERATE_PROMPT,
   DAILY_DIARY_GENERATE_PROMPT,
   PATCH_DRAFT_PROMPT,
@@ -84,9 +86,11 @@ Repo Stars: ${i.repoStars}`
       issueList,
     });
 
-    const content = await this.chat(prompt);
-
-    return this.parseLLMResponse(content, issues);
+    return this.generateStructuredOutput({
+      prompt,
+      parser: (content) => this.parseLLMResponse(content, issues),
+      repairPrompt: ISSUE_MATCH_REPAIR_PROMPT,
+    });
   }
 
   async generateDailyReport(issueAnalysis: string): Promise<string> {
@@ -262,50 +266,31 @@ Repo Stars: ${i.repoStars}`
   }
 
   private parseLLMResponse(content: string, originalIssues: GitHubIssue[]): MatchedIssue[] {
-    const matchedIssues: MatchedIssue[] = [];
-    const lines = content.split('\n');
+    const issueByReference = new Map(
+      originalIssues.map((issue) => [this.getIssueReference(issue), issue]),
+    );
 
-    for (const issue of originalIssues) {
-      const issueReference = this.getIssueReference(issue);
-      const issueLinePattern = new RegExp(`^${this.escapeRegExp(issueReference)}\\b`, 'i');
-      const issueLineIndex = lines.findIndex(line => issueLinePattern.test(line.trim()));
-      if (issueLineIndex === -1) continue;
+    const parsed = this.parseStructuredJson(content, IssueMatchListSchema);
 
-      const issueLine = lines[issueLineIndex];
-      if (!issueLine) {
-        continue;
-      }
+    return parsed.matches
+      .filter((match) => match.score >= 60)
+      .flatMap((match) => {
+        const issue = issueByReference.get(match.issueReference);
+        if (!issue) {
+          return [];
+        }
 
-      const scoreMatch = issueLine.match(/SCORE:\s*(\d+)|Score:\s*(\d+)|#\d+\s+(\d+)/i);
-      let score = 0;
-      if (scoreMatch) {
-        const rawScore = scoreMatch[1] || scoreMatch[2] || scoreMatch[3];
-        score = rawScore ? parseInt(rawScore, 10) || 0 : 0;
-      }
-
-      score = Math.min(100, Math.max(0, score));
-
-      if (score >= 60) {
-        const context = lines.slice(issueLineIndex, issueLineIndex + 5).join('\n');
-
-        const demandMatch = context.match(/Core Demand:\s*([^\n]+)/i);
-        const techMatch = context.match(/Tech(?:nology)? Requirements?:\s*([^\n]+)/i);
-        const workloadMatch = context.match(/Estimated Workload:\s*([^\n]+)/i);
-
-        matchedIssues.push({
+        return [{
           ...issue,
-          matchScore: score,
+          matchScore: match.score,
           analysis: {
-            coreDemand: demandMatch && demandMatch[1] ? demandMatch[1].trim() : '',
-            techRequirements: techMatch && techMatch[1] ? techMatch[1].split(/[,;]/).map(s => s.trim()).filter(Boolean) : [],
+            coreDemand: match.coreDemand,
+            techRequirements: match.techRequirements,
             solutionSuggestion: '',
-            estimatedWorkload: workloadMatch && workloadMatch[1] ? workloadMatch[1].trim() : '',
+            estimatedWorkload: match.estimatedWorkload,
           },
-        });
-      }
-    }
-
-    return matchedIssues.sort((a, b) => b.matchScore - a.matchScore);
+        }];
+      });
   }
 
   private parseImplementationDraft(content: string): ImplementationDraft {
@@ -376,9 +361,6 @@ Repo Stars: ${i.repoStars}`
     ].join('\n');
   }
 
-  private escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
 }
 
 export const llmService = new LLMService();

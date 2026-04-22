@@ -116,7 +116,7 @@ describe('LLMService implementation draft parsing', () => {
 });
 
 describe('LLMService issue scoring response parsing', () => {
-  test('parses matched issues, clamps scores, and sorts by score descending', () => {
+  test('parses structured matched issues and sorts by score descending', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
     const issues = [
       createIssue({ repoFullName: 'acme/demo', repoName: 'demo', number: 42 }),
@@ -124,22 +124,33 @@ describe('LLMService issue scoring response parsing', () => {
       createIssue({ repoFullName: 'acme/ignored', repoName: 'ignored', number: 11 }),
     ];
 
-    const parsed = service.parseLLMResponse([
-      'acme/demo#42 [SCORE: 120]',
-      'Core Demand: Add accessible labels',
-      'Tech Requirements: react, typescript; accessibility',
-      'Estimated Workload: 1-2 hours',
-      '',
-      'acme/web#7 [SCORE: 61]',
-      'Core Demand: Improve documentation clarity',
-      'Technology Requirements: markdown, docs',
-      'Estimated Workload: 30 minutes',
-      '',
-      'acme/ignored#11 [SCORE: 40]',
-      'Core Demand: Ignore this issue',
-      'Tech Requirements: none',
-      'Estimated Workload: 1 hour',
-    ].join('\n'), issues);
+    const parsed = service.parseLLMResponse(`
+      {
+        "matches": [
+          {
+            "issueReference": "acme/demo#42",
+            "score": 100,
+            "coreDemand": "Add accessible labels",
+            "techRequirements": ["react", "typescript", "accessibility"],
+            "estimatedWorkload": "1-2 hours"
+          },
+          {
+            "issueReference": "acme/web#7",
+            "score": 61,
+            "coreDemand": "Improve documentation clarity",
+            "techRequirements": ["markdown", "docs"],
+            "estimatedWorkload": "30 minutes"
+          },
+          {
+            "issueReference": "acme/ignored#11",
+            "score": 40,
+            "coreDemand": "Ignore this issue",
+            "techRequirements": ["none"],
+            "estimatedWorkload": "1 hour"
+          }
+        ]
+      }
+    `, issues);
 
     expect(parsed).toHaveLength(2);
     expect(parsed[0]?.repoFullName).toBe('acme/demo');

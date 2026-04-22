@@ -2,12 +2,6 @@ export const ISSUE_MATCH_PROMPT = `You are a professional open source contributi
 
 User Tech Profile: {{userProfile}}
 
-Output format - STRICTLY follow this format for EACH matched issue:
-{owner}/{repo}#{issue_number} [SCORE: 0-100]
-Core Demand: [one sentence]
-Tech Requirements: [comma separated list]
-Estimated Workload: [e.g., 1-2 hours]
-
 Requirements:
 1. Score 0-100 ONLY (100 = perfect match, 0 = no match)
 2. Tech stack match is MOST important (50% weight)
@@ -16,9 +10,48 @@ Requirements:
 5. Only include issues with score >= 60
 6. Use the exact issue reference shown in the input for every matched issue
 7. Do not invent issues or references that are not in the input
-8. Output in EXACT format above, no markdown, no headers, no extra text
+8. Return one valid JSON object only. No markdown. No commentary.
+
+Output schema:
+{
+  "matches": [
+    {
+      "issueReference": "owner/repo#123",
+      "score": 84,
+      "coreDemand": "one sentence",
+      "techRequirements": ["typescript", "react"],
+      "estimatedWorkload": "1-2 hours"
+    }
+  ]
+}
 
 Issues to analyze: {{issueList}}`;
+
+export const ISSUE_MATCH_REPAIR_PROMPT = `You are a professional open source contribution matching expert.
+
+The previous issue matching response was not parseable or did not match the required schema. Reformat it into strict JSON.
+
+Required schema:
+{
+  "matches": [
+    {
+      "issueReference": "owner/repo#123",
+      "score": 84,
+      "coreDemand": "one sentence",
+      "techRequirements": ["typescript", "react"],
+      "estimatedWorkload": "1-2 hours"
+    }
+  ]
+}
+
+Rules:
+1. Return one valid JSON object only. No commentary.
+2. Preserve only issue references that already appear in the previous response.
+3. If the previous response is unusable, return {"matches":[]}.
+
+Previous response:
+{{invalidResponse}}
+`;
 
 export const DAILY_REPORT_GENERATE_PROMPT = `You are a professional developer open source growth assistant. Based on the given GitHub issue analysis report, generate a standardized "Daily Open Source Issue Research Notes" Markdown document.
 
