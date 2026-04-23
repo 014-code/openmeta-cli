@@ -20,14 +20,19 @@ describe('LLMService implementation draft parsing', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
     const draft = service.parseImplementationDraft(`
       {
-        "summary": "Update the button label",
-        "fileChanges": [
-          {
-            "path": "src/button.tsx",
-            "reason": "Add aria-label",
-            "content": "export const Button = () => <button aria-label=\\"Open\\" />;"
-          }
-        ]
+        "version": "1",
+        "kind": "implementation_draft",
+        "status": "success",
+        "data": {
+          "summary": "Update the button label",
+          "fileChanges": [
+            {
+              "path": "src/button.tsx",
+              "reason": "Add aria-label",
+              "content": "export const Button = () => <button aria-label=\\"Open\\" />;"
+            }
+          ]
+        }
       }
     `);
 
@@ -41,19 +46,24 @@ describe('LLMService implementation draft parsing', () => {
     expect(() => service.parseImplementationDraft(`
       \`\`\`json
       {
-        "summary": "Mixed output",
-        "fileChanges": [
-          {
-            "path": "src/app.ts",
-            "reason": "Valid",
-            "content": "console.log('ok');"
-          },
-          {
-            "path": "",
-            "reason": "Missing path",
-            "content": "ignored"
-          }
-        ]
+        "version": "1",
+        "kind": "implementation_draft",
+        "status": "success",
+        "data": {
+          "summary": "Mixed output",
+          "fileChanges": [
+            {
+              "path": "src/app.ts",
+              "reason": "Valid",
+              "content": "console.log('ok');"
+            },
+            {
+              "path": "",
+              "reason": "Missing path",
+              "content": "ignored"
+            }
+          ]
+        }
       }
       \`\`\`
     `)).toThrow('LLM output failed schema validation.');
@@ -64,14 +74,19 @@ describe('LLMService implementation draft parsing', () => {
     const draft = service.parseImplementationDraft(`
       \`\`\`json
       {
-        "summary": "Add aria-label support",
-        "fileChanges": [
-          {
-            "path": "src/components/IconButton.tsx",
-            "reason": "Add accessible label handling for icon-only buttons",
-            "content": "export function IconButton() {\\n  return <button aria-label=\\"Open menu\\" />;\\n}"
-          }
-        ]
+        "version": "1",
+        "kind": "implementation_draft",
+        "status": "success",
+        "data": {
+          "summary": "Add aria-label support",
+          "fileChanges": [
+            {
+              "path": "src/components/IconButton.tsx",
+              "reason": "Add accessible label handling for icon-only buttons",
+              "content": "export function IconButton() {\\n  return <button aria-label=\\"Open menu\\" />;\\n}"
+            }
+          ]
+        }
       }
       \`\`\`
     `);
@@ -86,19 +101,24 @@ describe('LLMService implementation draft parsing', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
     const draft = service.parseImplementationDraft(`
       {
-        "summary": "Repeated output",
-        "fileChanges": [
-          {
-            "path": "src/button.tsx",
-            "reason": "First attempt",
-            "content": "export const Button = () => null;"
-          },
-          {
-            "path": "src/button.tsx",
-            "reason": "Final attempt",
-            "content": "export const Button = () => <button />;"
-          }
-        ]
+        "version": "1",
+        "kind": "implementation_draft",
+        "status": "success",
+        "data": {
+          "summary": "Repeated output",
+          "fileChanges": [
+            {
+              "path": "src/button.tsx",
+              "reason": "First attempt",
+              "content": "export const Button = () => null;"
+            },
+            {
+              "path": "src/button.tsx",
+              "reason": "Final attempt",
+              "content": "export const Button = () => <button />;"
+            }
+          ]
+        }
       }
     `);
 

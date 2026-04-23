@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import {
-  ImplementationDraftSchema,
+  ImplementationDraftEnvelopeSchema,
   IssueMatchListSchema,
   PatchDraftSchema,
   type PatchDraft,
@@ -294,7 +294,7 @@ Repo Stars: ${i.repoStars}`
   }
 
   private parseImplementationDraft(content: string): ImplementationDraft {
-    return this.parseStructuredJson(content, ImplementationDraftSchema);
+    return this.parseStructuredJson(content, ImplementationDraftEnvelopeSchema).data;
   }
 
   private parsePatchDraft(content: string): PatchDraft {

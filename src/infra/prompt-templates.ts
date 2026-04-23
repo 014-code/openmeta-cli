@@ -127,19 +127,24 @@ Requirements:
 4. Each file change must contain the full final file content after the edit.
 5. Do not delete files.
 6. If context is insufficient for a safe implementation, return:
-{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}
+{"version":"1","kind":"implementation_draft","status":"needs_review","data":{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}}
 7. Preserve the project's apparent style and formatting.
 
 Output schema:
 {
-  "summary": "short summary",
-  "fileChanges": [
-    {
-      "path": "relative/path/to/file",
-      "reason": "why this file changes",
-      "content": "full final file content"
-    }
-  ]
+  "version": "1",
+  "kind": "implementation_draft",
+  "status": "success",
+  "data": {
+    "summary": "short summary",
+    "fileChanges": [
+      {
+        "path": "relative/path/to/file",
+        "reason": "why this file changes",
+        "content": "full final file content"
+      }
+    ]
+  }
 }
 
 Issue:
@@ -158,21 +163,26 @@ The previous implementation response was not parseable or did not match the requ
 
 Required schema:
 {
-  "summary": "short summary",
-  "fileChanges": [
-    {
-      "path": "relative/path/to/file",
-      "reason": "why this file changes",
-      "content": "full final file content"
-    }
-  ]
+  "version": "1",
+  "kind": "implementation_draft",
+  "status": "success" | "needs_review",
+  "data": {
+    "summary": "short summary",
+    "fileChanges": [
+      {
+        "path": "relative/path/to/file",
+        "reason": "why this file changes",
+        "content": "full final file content"
+      }
+    ]
+  }
 }
 
 Rules:
 1. Return only one valid JSON object. No commentary.
 2. Preserve the intended edits from the previous response.
 3. If the previous response is unusable, return:
-{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}
+{"version":"1","kind":"implementation_draft","status":"needs_review","data":{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}}
 
 Previous response:
 {{invalidResponse}}
@@ -188,18 +198,23 @@ Requirements:
 3. Focus on the concrete validation failures first. Do not rewrite unrelated code.
 4. Keep the patch minimal and high confidence.
 5. If the validation output is insufficient for a safe repair, return:
-{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}
+{"version":"1","kind":"implementation_draft","status":"needs_review","data":{"summary":"Insufficient context for a safe code patch.","fileChanges":[]}}
 
 Required schema:
 {
-  "summary": "short summary",
-  "fileChanges": [
-    {
-      "path": "relative/path/to/file",
-      "reason": "why this file changes",
-      "content": "full final file content"
-    }
-  ]
+  "version": "1",
+  "kind": "implementation_draft",
+  "status": "success" | "needs_review",
+  "data": {
+    "summary": "short summary",
+    "fileChanges": [
+      {
+        "path": "relative/path/to/file",
+        "reason": "why this file changes",
+        "content": "full final file content"
+      }
+    ]
+  }
 }
 
 Issue:
