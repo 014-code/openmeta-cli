@@ -68,6 +68,38 @@ export interface RepoMemoryIssueRecord {
   title: string;
   overallScore: number;
   generatedAt: string;
+  status: 'selected' | 'draft_only' | 'review_required' | 'validated' | 'published' | 'pr_opened';
+  changedFiles: string[];
+  published: boolean;
+  reviewRequired: boolean;
+  validationSummary: string;
+  pullRequestUrl?: string;
+}
+
+export interface RepoMemoryRunStats {
+  totalRuns: number;
+  publishedRuns: number;
+  realPrRuns: number;
+  reviewRequiredRuns: number;
+  successfulValidationRuns: number;
+  failedValidationRuns: number;
+}
+
+export interface RepoMemoryPathSignal {
+  path: string;
+  candidateCount: number;
+  changedCount: number;
+  successfulValidationCount: number;
+  publishedCount: number;
+  lastSeenAt: string;
+}
+
+export interface RepoMemoryValidationSignal {
+  command: string;
+  failureCount: number;
+  lastExitCode: number | null;
+  lastSeenAt: string;
+  sampleOutput?: string;
 }
 
 export interface RepoMemory {
@@ -80,6 +112,9 @@ export interface RepoMemory {
   detectedTestCommands: string[];
   preferredPaths: string[];
   generatedDossiers: number;
+  runStats: RepoMemoryRunStats;
+  pathSignals: RepoMemoryPathSignal[];
+  validationSignals: RepoMemoryValidationSignal[];
   recentIssues: RepoMemoryIssueRecord[];
 }
 

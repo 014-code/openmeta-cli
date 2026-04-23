@@ -100,7 +100,31 @@ describe('stateful services', () => {
     expect(nextMemory.generatedDossiers).toBe(1);
     expect(loadedMemory.lastSelectedIssue).toBe('acme/demo#42');
     expect(loadedMemory.preferredPaths).toContain('src/components/IconButton.tsx');
+    expect(loadedMemory.pathSignals[0]?.candidateCount).toBe(1);
     expect(readFileSync(memoryService.getPath('acme/demo'), 'utf-8')).toContain('"generatedDossiers": 1');
+  });
+
+  test('memory service records run outcomes and validation failure signals', () => {
+    memoryService.update(createRankedIssue(), createWorkspace());
+    const nextMemory = memoryService.recordOutcome({
+      issue: createRankedIssue(),
+      workspace: createWorkspace(),
+      changedFiles: ['src/components/IconButton.tsx'],
+      validationResults: [
+        { command: 'bun test', exitCode: 1, passed: false, output: 'Expected aria-label to be present' },
+      ],
+      published: false,
+      reviewRequired: true,
+      pullRequestUrl: undefined,
+    });
+
+    expect(nextMemory.runStats.totalRuns).toBe(1);
+    expect(nextMemory.runStats.reviewRequiredRuns).toBe(1);
+    expect(nextMemory.runStats.failedValidationRuns).toBe(1);
+    expect(nextMemory.pathSignals[0]?.changedCount).toBe(1);
+    expect(nextMemory.validationSignals[0]?.command).toBe('bun test');
+    expect(nextMemory.recentIssues[0]?.status).toBe('review_required');
+    expect(memoryService.renderMarkdown(nextMemory)).toContain('## Validation Failure Signals');
   });
 
   test('inbox service deduplicates items and keeps higher scores first', () => {
