@@ -171,4 +171,53 @@ describe('workspaceService.detectTestCommands', () => {
 
     expect(rankedFiles[0]).toBe('src/components/Dropzone.tsx');
   });
+
+  test('prioritizes historically successful files from memory path signals', () => {
+    const rankedFiles = (workspaceService as unknown as {
+      rankCandidateFiles: (
+        issue: { title: string; body: string; analysis: { coreDemand: string; techRequirements: string[] } },
+        memory: {
+          preferredPaths: string[];
+          pathSignals: Array<{
+            path: string;
+            candidateCount: number;
+            changedCount: number;
+            successfulValidationCount: number;
+            publishedCount: number;
+          }>;
+          recentIssues: Array<{
+            changedFiles: string[];
+            status: 'selected' | 'draft_only' | 'review_required' | 'validated' | 'published' | 'pr_opened';
+          }>;
+        },
+        files: string[],
+      ) => string[];
+    }).rankCandidateFiles({
+      title: 'Improve accessibility in icon interactions',
+      body: 'Audit the button flow for better labels and affordances.',
+      analysis: {
+        coreDemand: 'Tighten icon button accessibility behavior.',
+        techRequirements: ['react', 'typescript'],
+      },
+    }, {
+      preferredPaths: [],
+      pathSignals: [
+        {
+          path: 'src/components/IconButton.tsx',
+          candidateCount: 2,
+          changedCount: 2,
+          successfulValidationCount: 2,
+          publishedCount: 1,
+        },
+      ],
+      recentIssues: [
+        {
+          changedFiles: ['src/components/IconButton.tsx'],
+          status: 'published',
+        },
+      ],
+    }, ['src/utils/labels.ts', 'src/components/IconButton.tsx']);
+
+    expect(rankedFiles[0]).toBe('src/components/IconButton.tsx');
+  });
 });

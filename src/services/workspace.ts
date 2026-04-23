@@ -236,6 +236,10 @@ export class WorkspaceService {
   private scorePath(path: string, keywords: string[], memory: RepoMemory, referencedPaths: string[]): number {
     let score = 0;
     const lowerPath = path.toLowerCase();
+    const pathSignals = memory.pathSignals ?? [];
+    const recentIssues = memory.recentIssues ?? [];
+    const pathSignal = pathSignals.find((signal) => signal.path === path);
+    const recentIssue = recentIssues.find((issue) => issue.changedFiles.includes(path));
 
     for (const keyword of keywords) {
       if (lowerPath.includes(keyword)) {
@@ -245,6 +249,23 @@ export class WorkspaceService {
 
     if (memory.preferredPaths.some((candidate) => candidate === path)) {
       score += 12;
+    }
+
+    if (pathSignal) {
+      score += pathSignal.candidateCount;
+      score += pathSignal.changedCount * 6;
+      score += pathSignal.successfulValidationCount * 10;
+      score += pathSignal.publishedCount * 14;
+    }
+
+    if (recentIssue) {
+      score += 6;
+
+      if (recentIssue.status === 'published' || recentIssue.status === 'pr_opened') {
+        score += 6;
+      } else if (recentIssue.status === 'validated') {
+        score += 3;
+      }
     }
 
     for (const referencedPath of referencedPaths) {
