@@ -191,7 +191,21 @@ export class AgentOrchestrator {
       tone: 'info',
     }, async () => llmService.generatePatchDraft(selectedIssue, workspace, memory));
     const patchDraft = patchDraftResult.data;
-    const implementation = await this.generateConcretePatch(selectedIssue, workspace, patchDraft, runChecks);
+    if (patchDraftResult.status !== 'success') {
+      this.showStructuredReviewNotice({
+        title: 'Patch strategy requires review',
+        subtitle: 'OpenMeta marked the generated patch plan as review-required, so this run will preserve artifacts but skip concrete code edits.',
+        lines: [
+          `Goal: ${patchDraft.goal}`,
+        ],
+      });
+    }
+    const implementation = patchDraftResult.status === 'success'
+      ? await this.generateConcretePatch(selectedIssue, workspace, patchDraft, runChecks)
+      : {
+        changedFiles: [],
+        validationResults: workspace.testResults,
+      };
     completedStages.add('draft');
     const workspaceForArtifacts: RepoWorkspaceContext = {
       ...workspace,
@@ -210,11 +224,21 @@ export class AgentOrchestrator {
       tone: 'info',
     }, async () => llmService.generatePrDraft(selectedIssue, patchDraft, workspaceForArtifacts));
     const prDraft = prDraftResult.data;
+    if (prDraftResult.status !== 'success') {
+      this.showStructuredReviewNotice({
+        title: 'PR narrative requires review',
+        subtitle: 'OpenMeta marked the generated PR draft as review-required, so this run will stay in draft-only mode and skip opening a real PR.',
+        lines: [
+          `Title: ${prDraft.title}`,
+        ],
+      });
+    }
     const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
     const prDraftMarkdown = contentService.formatPullRequestDraftMarkdown(prDraft);
 
     const contributionPullRequest = await this.submitContributionPullRequestIfPossible({
       config,
+      allowRealPr: patchDraftResult.status === 'success' && prDraftResult.status === 'success',
       headless,
       issue: selectedIssue,
       prDraft,
@@ -706,6 +730,9 @@ export class AgentOrchestrator {
     for (let start = 0; start < Math.min(issues.length, 80); start += batchSize) {
       const batch = issues.slice(start, start + batchSize);
       const scoredBatch = await llmService.scoreIssues(userProfile, batch);
+      if (scoredBatch.status !== 'success') {
+        logger.warn('Issue scoring returned advisory results that require review. Continuing with the parsed matches only.');
+      }
       matches.push(...scoredBatch.data);
       if (matches.length >= 20) {
         break;
@@ -823,6 +850,21 @@ export class AgentOrchestrator {
         failedMessage: 'Concrete patch generation failed',
         tone: 'info',
       }, async () => llmService.generateImplementationDraft(issue, workspace, patchDraft));
+      if (implementation.status !== 'success') {
+        this.showStructuredReviewNotice({
+          title: 'Concrete patch requires review',
+          subtitle: 'OpenMeta marked the implementation draft as review-required, so no repository files will be modified automatically.',
+          lines: [
+            implementation.data.summary || 'The generated implementation needs manual review before any file edits are applied.',
+          ],
+        });
+        logger.warn('Skipping automatic file edits because the implementation draft requires review.');
+        return {
+          changedFiles: [],
+          validationResults: workspace.testResults,
+        };
+      }
+
       if (implementation.data.fileChanges.length === 0) {
         ui.callout({
           label: 'OpenMeta Agent',
@@ -905,6 +947,7 @@ export class AgentOrchestrator {
 
   private async publishArtifactsIfNeeded(input: {
     config: AppConfig;
+    allowRealPr?: boolean;
     headless: boolean;
     issue: RankedIssue;
     patchDraftMarkdown: string;
@@ -971,6 +1014,7 @@ export class AgentOrchestrator {
 
   private async submitContributionPullRequestIfPossible(input: {
     config: AppConfig;
+    allowRealPr: boolean;
     headless: boolean;
     issue: RankedIssue;
     prDraft: PullRequestDraft;
@@ -981,6 +1025,14 @@ export class AgentOrchestrator {
     if (input.changedFiles.length === 0) {
       return {
         changedFiles: [],
+        validationResults: input.validationResults,
+      };
+    }
+
+    if (!input.allowRealPr) {
+      logger.warn('Skipping real draft PR creation because one or more structured drafts require review.');
+      return {
+        changedFiles: input.changedFiles,
         validationResults: input.validationResults,
       };
     }
@@ -1235,6 +1287,18 @@ export class AgentOrchestrator {
       currentFiles,
     ));
 
+    if (repairDraft.status !== 'success') {
+      this.showStructuredReviewNotice({
+        title: 'Validation repair requires review',
+        subtitle: 'OpenMeta marked the repair patch as review-required, so it will not be applied automatically.',
+        lines: [
+          repairDraft.data.summary || 'The generated repair needs manual review before any additional file edits are applied.',
+        ],
+      });
+      logger.warn('Skipping validation repair because the generated patch requires review.');
+      return null;
+    }
+
     if (repairDraft.data.fileChanges.length === 0) {
       logger.warn('Validation repair pass did not produce any additional safe file edits.');
       return null;
@@ -1473,6 +1537,20 @@ export class AgentOrchestrator {
       title: prDraft.title,
       body: contentService.formatPullRequestDraftBody(prDraft),
     };
+  }
+
+  private showStructuredReviewNotice(input: {
+    title: string;
+    subtitle: string;
+    lines?: string[];
+  }): void {
+    ui.callout({
+      label: 'OpenMeta Agent',
+      title: input.title,
+      subtitle: input.subtitle,
+      lines: input.lines,
+      tone: 'warning',
+    });
   }
 
   private async getUpstreamRepositoryContext(issue: RankedIssue): Promise<TargetRepoContext> {

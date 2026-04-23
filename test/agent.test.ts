@@ -193,4 +193,51 @@ describe('AgentOrchestrator draft PR parsing', () => {
       workspaceService.runValidationCommands = originalRunValidationCommands;
     }
   });
+
+  test('skips generated file edits when the implementation draft requires review', async () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-agent-review-'));
+    tempDirs.push(workspacePath);
+    mkdirSync(join(workspacePath, 'src'), { recursive: true });
+    writeFileSync(join(workspacePath, 'src', 'app.ts'), 'export const version = 0;\n', 'utf-8');
+
+    const originalGenerateImplementationDraft = llmService.generateImplementationDraft;
+
+    try {
+      llmService.generateImplementationDraft = async () => ({
+        version: '1',
+        kind: 'implementation_draft',
+        status: 'needs_review',
+        data: {
+          summary: 'The generated implementation needs manual review.',
+          fileChanges: [
+            {
+              path: 'src/app.ts',
+              reason: 'Candidate implementation that should not be auto-applied',
+              content: 'export const version = 1;\n',
+            },
+          ],
+        },
+      });
+
+      const orchestrator = new AgentOrchestrator() as unknown as AgentInternals;
+      const result = await orchestrator.generateConcretePatch(
+        createRankedIssue(),
+        createWorkspace({
+          workspacePath,
+          snippets: [{ path: 'src/app.ts', content: 'export const version = 0;\n' }],
+          testCommands: [],
+          validationCommands: [],
+          validationWarnings: [],
+          testResults: [],
+        }),
+        createPatchDraft(),
+        true,
+      );
+
+      expect(result.changedFiles).toEqual([]);
+      expect(readFileSync(join(workspacePath, 'src', 'app.ts'), 'utf-8')).toBe('export const version = 0;\n');
+    } finally {
+      llmService.generateImplementationDraft = originalGenerateImplementationDraft;
+    }
+  });
 });
