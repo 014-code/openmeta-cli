@@ -153,29 +153,34 @@ describe('LLMService issue scoring response parsing', () => {
 
     const parsed = service.parseLLMResponse(`
       {
-        "matches": [
-          {
-            "issueReference": "acme/demo#42",
-            "score": 100,
-            "coreDemand": "Add accessible labels",
-            "techRequirements": ["react", "typescript", "accessibility"],
-            "estimatedWorkload": "1-2 hours"
-          },
-          {
-            "issueReference": "acme/web#7",
-            "score": 61,
-            "coreDemand": "Improve documentation clarity",
-            "techRequirements": ["markdown", "docs"],
-            "estimatedWorkload": "30 minutes"
-          },
-          {
-            "issueReference": "acme/ignored#11",
-            "score": 40,
-            "coreDemand": "Ignore this issue",
-            "techRequirements": ["none"],
-            "estimatedWorkload": "1 hour"
-          }
-        ]
+        "version": "1",
+        "kind": "issue_match_list",
+        "status": "success",
+        "data": {
+          "matches": [
+            {
+              "issueReference": "acme/demo#42",
+              "score": 100,
+              "coreDemand": "Add accessible labels",
+              "techRequirements": ["react", "typescript", "accessibility"],
+              "estimatedWorkload": "1-2 hours"
+            },
+            {
+              "issueReference": "acme/web#7",
+              "score": 61,
+              "coreDemand": "Improve documentation clarity",
+              "techRequirements": ["markdown", "docs"],
+              "estimatedWorkload": "30 minutes"
+            },
+            {
+              "issueReference": "acme/ignored#11",
+              "score": 40,
+              "coreDemand": "Ignore this issue",
+              "techRequirements": ["none"],
+              "estimatedWorkload": "1 hour"
+            }
+          ]
+        }
       }
     `, issues);
 

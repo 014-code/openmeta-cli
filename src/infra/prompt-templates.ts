@@ -14,15 +14,20 @@ Requirements:
 
 Output schema:
 {
-  "matches": [
-    {
-      "issueReference": "owner/repo#123",
-      "score": 84,
-      "coreDemand": "one sentence",
-      "techRequirements": ["typescript", "react"],
-      "estimatedWorkload": "1-2 hours"
-    }
-  ]
+  "version": "1",
+  "kind": "issue_match_list",
+  "status": "success",
+  "data": {
+    "matches": [
+      {
+        "issueReference": "owner/repo#123",
+        "score": 84,
+        "coreDemand": "one sentence",
+        "techRequirements": ["typescript", "react"],
+        "estimatedWorkload": "1-2 hours"
+      }
+    ]
+  }
 }
 
 Issues to analyze: {{issueList}}`;
@@ -33,21 +38,26 @@ The previous issue matching response was not parseable or did not match the requ
 
 Required schema:
 {
-  "matches": [
-    {
-      "issueReference": "owner/repo#123",
-      "score": 84,
-      "coreDemand": "one sentence",
-      "techRequirements": ["typescript", "react"],
-      "estimatedWorkload": "1-2 hours"
-    }
-  ]
+  "version": "1",
+  "kind": "issue_match_list",
+  "status": "success" | "needs_review",
+  "data": {
+    "matches": [
+      {
+        "issueReference": "owner/repo#123",
+        "score": 84,
+        "coreDemand": "one sentence",
+        "techRequirements": ["typescript", "react"],
+        "estimatedWorkload": "1-2 hours"
+      }
+    ]
+  }
 }
 
 Rules:
 1. Return one valid JSON object only. No commentary.
 2. Preserve only issue references that already appear in the previous response.
-3. If the previous response is unusable, return {"matches":[]}.
+3. If the previous response is unusable, return {"version":"1","kind":"issue_match_list","status":"needs_review","data":{"matches":[]}}.
 
 Previous response:
 {{invalidResponse}}

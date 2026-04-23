@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import {
   ImplementationDraftEnvelopeSchema,
-  IssueMatchListSchema,
+  IssueMatchListEnvelopeSchema,
   PatchDraftEnvelopeSchema,
   type PatchDraft,
   PullRequestDraftEnvelopeSchema,
@@ -270,9 +270,9 @@ Repo Stars: ${i.repoStars}`
       originalIssues.map((issue) => [this.getIssueReference(issue), issue]),
     );
 
-    const parsed = this.parseStructuredJson(content, IssueMatchListSchema);
+    const parsed = this.parseStructuredJson(content, IssueMatchListEnvelopeSchema);
 
-    return parsed.matches
+    return parsed.data.matches
       .filter((match) => match.score >= 60)
       .flatMap((match) => {
         const issue = issueByReference.get(match.issueReference);
