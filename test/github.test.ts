@@ -90,6 +90,22 @@ describe('GitHubService internals', () => {
     expect(service.shouldIncludeIssue({ locked: false, assignees: [] })).toBe(true);
   });
 
+  test('filters action-blocking issue labels before scoring', () => {
+    const service = new GitHubService() as unknown as GitHubServiceInternals;
+
+    expect(service.shouldIncludeIssue({
+      locked: false,
+      assignees: [],
+      labels: [{ name: 'needs info' }],
+    })).toBe(false);
+
+    expect(service.shouldIncludeIssue({
+      locked: false,
+      assignees: [],
+      labels: [{ name: 'type: question' }],
+    })).toBe(false);
+  });
+
   test('parses repository URLs and rejects malformed URLs', () => {
     const service = new GitHubService() as unknown as GitHubServiceInternals;
 
