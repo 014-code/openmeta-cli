@@ -38,6 +38,10 @@ interface AgentInternals {
     },
     issues: Array<ReturnType<typeof createIssue>>,
   ): Promise<Array<ReturnType<typeof createMatchedIssue>>>;
+  buildImplementationWorkspace(
+    workspace: ReturnType<typeof createWorkspace>,
+    patchDraft: ReturnType<typeof createPatchDraft>,
+  ): ReturnType<typeof createWorkspace>;
   formatValidationSummary(results: Array<{
     command: string;
     exitCode: number | null;
@@ -181,6 +185,58 @@ describe('AgentOrchestrator draft PR parsing', () => {
     } finally {
       llmService.scoreIssues = originalScoreIssues;
     }
+  });
+
+  test('loads patch draft target files into implementation context', () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-agent-context-'));
+    tempDirs.push(workspacePath);
+    mkdirSync(join(workspacePath, 'src', 'components'), { recursive: true });
+    writeFileSync(join(workspacePath, 'src', 'components', 'IconButton.tsx'), 'export function IconButton() { return null; }\n', 'utf-8');
+    writeFileSync(join(workspacePath, 'src', 'components', 'IconButton.test.tsx'), 'test("icon button", () => {});\n', 'utf-8');
+
+    const orchestrator = new AgentOrchestrator() as unknown as AgentInternals;
+    const workspace = orchestrator.buildImplementationWorkspace(
+      createWorkspace({
+        workspacePath,
+        candidateFiles: ['src/components/IconButton.tsx'],
+        snippets: [
+          {
+            path: 'src/components/IconButton.tsx',
+            content: 'export function IconButton() { return null; }\n',
+          },
+        ],
+      }),
+      createPatchDraft({
+        targetFiles: [
+          {
+            path: 'src/components/IconButton.tsx',
+            reason: 'Primary component',
+          },
+          {
+            path: 'src/components/IconButton.test.tsx',
+            reason: 'Coverage for the updated behavior',
+          },
+          {
+            path: '../outside.ts',
+            reason: 'Unsafe path that must not enter context',
+          },
+        ],
+        proposedChanges: [
+          {
+            title: 'Update tests',
+            details: 'Cover the accessibility behavior.',
+            files: ['src/components/IconButton.test.tsx'],
+          },
+        ],
+      }),
+    );
+
+    expect(workspace.candidateFiles).toContain('src/components/IconButton.test.tsx');
+    expect(workspace.candidateFiles).not.toContain('../outside.ts');
+    expect(workspace.snippets.map((snippet) => snippet.path)).toEqual([
+      'src/components/IconButton.tsx',
+      'src/components/IconButton.test.tsx',
+    ]);
   });
 
   test('treats infrastructure validation failures as non-blocking', () => {

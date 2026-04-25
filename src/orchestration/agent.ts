@@ -9,6 +9,7 @@ import type {
   ContributionAgentResult,
   GitHubIssue,
   RankedIssue,
+  RepoFileSnippet,
   RepoWorkspaceContext,
   TestResult,
 } from '../types/index.js';
@@ -246,16 +247,17 @@ export class AgentOrchestrator {
         ],
       });
     }
+    const implementationWorkspace = this.buildImplementationWorkspace(workspace, patchDraft);
     const implementation = patchDraftResult.status === 'success'
-      ? await this.generateConcretePatch(selectedIssue, workspace, patchDraft, runChecks, draftOnly)
+      ? await this.generateConcretePatch(selectedIssue, implementationWorkspace, patchDraft, runChecks, draftOnly)
       : {
         changedFiles: [],
-        validationResults: workspace.testResults,
+        validationResults: implementationWorkspace.testResults,
         reviewRequired: true,
       };
     completedStages.add('draft');
     const workspaceForArtifacts: RepoWorkspaceContext = {
-      ...workspace,
+      ...implementationWorkspace,
       testResults: implementation.validationResults,
     };
 
@@ -1024,6 +1026,70 @@ export class AgentOrchestrator {
     writeFileSync(input.artifacts.memoryPath, input.memoryMarkdown, 'utf-8');
     writeFileSync(input.artifacts.inboxPath, input.inboxMarkdown, 'utf-8');
     writeFileSync(input.artifacts.proofOfWorkPath, input.proofMarkdown, 'utf-8');
+  }
+
+  private buildImplementationWorkspace(
+    workspace: RepoWorkspaceContext,
+    patchDraft: PatchDraft,
+  ): RepoWorkspaceContext {
+    const patchPaths = this.collectPatchDraftPaths(patchDraft);
+    const existingSnippetPaths = new Set(workspace.snippets.map((snippet) => snippet.path));
+    const missingSnippetPaths = patchPaths.filter((path) => !existingSnippetPaths.has(path));
+    const extraSnippets = workspaceService
+      .readWorkspaceFiles(workspace.workspacePath, missingSnippetPaths)
+      .filter((snippet) => snippet.content.trim().length > 0);
+
+    if (extraSnippets.length === 0 && patchPaths.every((path) => workspace.candidateFiles.includes(path))) {
+      return workspace;
+    }
+
+    if (extraSnippets.length > 0) {
+      logger.info(`Loaded ${extraSnippets.length} patch target file(s) into implementation context.`);
+    }
+
+    return {
+      ...workspace,
+      candidateFiles: this.uniqueStrings([
+        ...workspace.candidateFiles,
+        ...patchPaths,
+      ]),
+      snippets: this.mergeSnippets(workspace.snippets, extraSnippets),
+    };
+  }
+
+  private collectPatchDraftPaths(patchDraft: PatchDraft): string[] {
+    return this.uniqueStrings([
+      ...patchDraft.targetFiles.map((file) => file.path),
+      ...patchDraft.proposedChanges.flatMap((change) => change.files),
+    ].flatMap((path) => {
+      const normalized = this.normalizePatchPath(path);
+      return normalized ? [normalized] : [];
+    }));
+  }
+
+  private normalizePatchPath(path: string): string | null {
+    const normalized = path.replace(/^\/+/, '').trim();
+    if (!normalized || normalized.split(/[\\/]/).includes('..')) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private mergeSnippets(current: RepoFileSnippet[], next: RepoFileSnippet[]): RepoFileSnippet[] {
+    const snippets = new Map<string, RepoFileSnippet>();
+
+    for (const snippet of [...current, ...next]) {
+      if (!snippets.has(snippet.path)) {
+        snippets.set(snippet.path, snippet);
+      }
+    }
+
+    return [...snippets.values()];
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
   }
 
   private async generateConcretePatch(
