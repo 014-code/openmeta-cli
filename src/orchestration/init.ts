@@ -41,6 +41,7 @@ const LLM_PROVIDERS: LLMProviderOption[] = [
     value: 'custom',
     baseUrl: '',
     models: [],
+    // 兼容 OpenAI 接口的第三方平台通常需要用户自行填写模型名和网关地址。
     allowCustomModel: true,
     allowCustomBaseUrl: true,
   },
@@ -193,6 +194,7 @@ export class InitOrchestrator {
         throw new Error(`Provider not found: ${providerValue}`);
       }
 
+      // 自定义 provider 不提供内置候选项，因此这里转为手动输入。
       apiBaseUrl = selectedProvider.allowCustomBaseUrl
         ? await this.promptApiBaseUrl(config.llm.apiBaseUrl)
         : selectedProvider.baseUrl;
@@ -214,6 +216,7 @@ export class InitOrchestrator {
       llmValid = await this.validateLlmConnection();
 
       if (!llmValid) {
+        // 保留底层失败原因，方便用户区分是鉴权、配额还是网关问题。
         const validationDetail = llmService.getLastValidationError();
         this.renderStep('llm', completedSteps, 'Provider validation needs to be retried.', true);
         ui.callout({
@@ -539,6 +542,7 @@ export class InitOrchestrator {
   }
 
   private getProviderDefault(provider: AppConfig['llm']['provider']): string {
+    // 兼容旧配置；遇到未知 provider 时回退到 custom，避免 init 直接卡死。
     return LLM_PROVIDERS.some((option) => option.value === provider)
       ? provider
       : 'custom';

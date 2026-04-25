@@ -63,6 +63,7 @@ export class LLMService {
 
     try {
       const controller = new AbortController();
+      // 校验阶段只需要确认模型可达，不希望被长输出或 provider 卡住。
       const timeout = setTimeout(() => controller.abort(), LLM_VALIDATION_TIMEOUT_MS);
 
       try {
@@ -443,6 +444,7 @@ Repo Stars: ${i.repoStars}`
 
     const status = this.extractStatusCode(error);
     if (status !== null) {
+      // 优先把常见 HTTP 状态翻译成可操作的提示，init 界面会直接展示给用户。
       return LLM_VALIDATION_STATUS_HINTS[status] ?? `The provider returned HTTP ${status} during validation.`;
     }
 

@@ -1,6 +1,7 @@
 export const LLM_VALIDATION_TIMEOUT_MS = 120_000;
 export const LLM_VALIDATION_PROMPT = 'Reply with exactly: OK';
 export const LLM_VALIDATION_REQUEST = {
+  // 把验证请求压到最小，减少 token 消耗，也避免部分模型顺手输出一大段内容。
   temperature: 0,
   top_p: 1,
   max_tokens: 8,
