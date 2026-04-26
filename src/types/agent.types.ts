@@ -171,3 +171,16 @@ export interface ContributionAgentResult {
   changedFiles?: string[];
   pullRequestUrl?: string;
 }
+
+export type AgentRunStatus = 'running' | 'success' | 'failed' | 'cancelled';
+
+export interface AgentRunRecord {
+  id: string;
+  commandName: string;
+  args: string[];
+  status: AgentRunStatus;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  error?: string;
+}

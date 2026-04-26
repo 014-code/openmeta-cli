@@ -209,6 +209,7 @@ bun run ./src/cli.ts scout --local --limit 10
 # 4. 查看贡献沉淀
 bun run ./src/cli.ts inbox
 bun run ./src/cli.ts pow
+bun run ./src/cli.ts runs
 
 # 5. 查看或调整配置
 bun run ./src/cli.ts config view
@@ -244,6 +245,8 @@ bun run ./src/cli.ts doctor
 | `openmeta scout --local` | 使用本地启发式评分，不调用 LLM，适合模型服务暂时不可用时先筛机会 |
 | `openmeta inbox` | 查看已起草的贡献机会收件箱 |
 | `openmeta pow` | 查看贡献工作量证明记录 |
+| `openmeta runs` | 查看最近命令运行记录、耗时和失败原因 |
+| `openmeta runs <id>` | 查看单次运行详情 |
 | `openmeta automation status` | 查看自动化状态 |
 | `openmeta automation enable` | 启用每日自动化 |
 | `openmeta automation disable` | 关闭每日自动化 |
@@ -494,6 +497,7 @@ bun run ./src/cli.ts scout --local --limit 10
 # 4. Inspect durable contribution assets
 bun run ./src/cli.ts inbox
 bun run ./src/cli.ts pow
+bun run ./src/cli.ts runs
 
 # 5. Review or update configuration
 bun run ./src/cli.ts config view
@@ -529,6 +533,8 @@ If you already built the binary:
 | `openmeta scout --local` | Use local heuristic scoring without calling the LLM provider |
 | `openmeta inbox` | Show drafted contribution opportunities |
 | `openmeta pow` | Show proof-of-work history |
+| `openmeta runs` | Show recent command runs, durations, and failure reasons |
+| `openmeta runs <id>` | Inspect one recorded run |
 | `openmeta automation status` | Show automation status |
 | `openmeta automation enable` | Enable daily unattended automation |
 | `openmeta automation disable` | Disable daily unattended automation |

@@ -475,6 +475,15 @@ function completionCopy(commandName: string): Pick<CardOptions, 'title' | 'subti
         ],
         tone: 'success',
       };
+    case 'OpenMeta Runs':
+      return {
+        title: 'The local run ledger is readable',
+        subtitle: 'Recent command execution is now traceable without digging through raw state.',
+        lines: [
+          'The next debugging pass has a real timeline to stand on.',
+        ],
+        tone: 'success',
+      };
     default:
       return {
         title: 'Execution settled into a clean end state',
