@@ -44,6 +44,18 @@ export interface GeneratedFileChange {
   content: string;
 }
 
+export interface SkippedGeneratedFileChange {
+  path: string;
+  reason: string;
+}
+
+export interface GeneratedChangeApplyResult {
+  appliedFiles: string[];
+  skippedFiles: SkippedGeneratedFileChange[];
+  reviewRequired: boolean;
+  reviewReason?: string;
+}
+
 export interface ImplementationDraft {
   summary: string;
   fileChanges: GeneratedFileChange[];

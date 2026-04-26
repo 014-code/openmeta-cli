@@ -1317,13 +1317,33 @@ export class AgentOrchestrator {
         doneMessage: 'Generated file edits applied',
         failedMessage: 'Generated file edits failed to apply',
         tone: 'info',
-      }, async () => workspaceService.applyGeneratedChanges(workspace.workspacePath, implementation.data.fileChanges));
-      if (changedFiles.length === 0) {
+      }, async () => workspaceService.applyGeneratedChanges(workspace.workspacePath, implementation.data.fileChanges, {
+        allowedPaths: workspace.snippets.map((snippet) => snippet.path),
+      }));
+      if (changedFiles.reviewRequired) {
+        this.showStructuredReviewNotice({
+          title: 'Generated patch needs manual review',
+          subtitle: 'OpenMeta refused to apply one or more generated edits because they reached outside the selected implementation context.',
+          lines: [
+            changedFiles.reviewReason || 'Review the generated patch before applying it manually.',
+          ],
+        });
+        logger.warn(`Generated patch requires review: ${changedFiles.reviewReason || 'unspecified reason'}`);
+        return {
+          changedFiles: changedFiles.appliedFiles,
+          validationResults: workspace.testResults,
+          reviewRequired: true,
+        };
+      }
+      if (changedFiles.appliedFiles.length === 0) {
         ui.callout({
           label: 'OpenMeta Agent',
           title: 'Generated edits produced no file changes',
           subtitle: 'The proposed patch matched the current workspace or resolved to no effective write.',
-          lines: ['Draft artifacts will still be preserved for manual follow-up.'],
+          lines: [
+            'Draft artifacts will still be preserved for manual follow-up.',
+            ...changedFiles.skippedFiles.slice(0, 3).map((file) => `${file.path}: ${file.reason}`),
+          ],
           tone: 'warning',
         });
         logger.warn('The generated patch did not change any files in the workspace. Continuing with draft artifacts only.');
@@ -1334,7 +1354,7 @@ export class AgentOrchestrator {
         };
       }
 
-      logger.success(`Applied ${changedFiles.length} workspace file updates`);
+      logger.success(`Applied ${changedFiles.appliedFiles.length} workspace file updates`);
 
       const validationResults = runChecks && workspace.validationCommands.length > 0
         ? await ui.task({
@@ -1345,12 +1365,12 @@ export class AgentOrchestrator {
         }, async () => workspaceService.runValidationCommands(workspace.workspacePath, workspace.validationCommands.slice(0, 3)))
         : workspace.testResults;
 
-      if (runChecks && changedFiles.length > 0 && this.hasBlockingValidationFailures(validationResults)) {
+      if (runChecks && changedFiles.appliedFiles.length > 0 && this.hasBlockingValidationFailures(validationResults)) {
         const repaired = await this.attemptValidationRepair({
           issue,
           workspace,
           patchDraft,
-          changedFiles,
+          changedFiles: changedFiles.appliedFiles,
           validationResults,
         });
 
@@ -1360,7 +1380,7 @@ export class AgentOrchestrator {
       }
 
       return {
-        changedFiles,
+        changedFiles: changedFiles.appliedFiles,
         validationResults,
         reviewRequired: false,
       };
@@ -1742,9 +1762,27 @@ export class AgentOrchestrator {
       doneMessage: 'Validation repair edits applied',
       failedMessage: 'Validation repair edits failed to apply',
       tone: 'info',
-    }, async () => workspaceService.applyGeneratedChanges(input.workspace.workspacePath, repairDraft.data.fileChanges));
+    }, async () => workspaceService.applyGeneratedChanges(input.workspace.workspacePath, repairDraft.data.fileChanges, {
+      allowedPaths: input.changedFiles,
+    }));
 
-    if (repairedFiles.length === 0) {
+    if (repairedFiles.reviewRequired) {
+      this.showStructuredReviewNotice({
+        title: 'Validation repair needs manual review',
+        subtitle: 'OpenMeta refused to apply one or more repair edits because they reached outside the changed file set.',
+        lines: [
+          repairedFiles.reviewReason || 'Review the generated repair before applying it manually.',
+        ],
+      });
+      logger.warn(`Validation repair requires review: ${repairedFiles.reviewReason || 'unspecified reason'}`);
+      return {
+        changedFiles: input.changedFiles,
+        validationResults: input.validationResults,
+        reviewRequired: true,
+      };
+    }
+
+    if (repairedFiles.appliedFiles.length === 0) {
       logger.warn('Validation repair pass produced no effective file changes.');
       return null;
     }
@@ -1760,7 +1798,7 @@ export class AgentOrchestrator {
     ));
 
     return {
-      changedFiles: [...new Set([...input.changedFiles, ...repairedFiles])],
+      changedFiles: [...new Set([...input.changedFiles, ...repairedFiles.appliedFiles])],
       validationResults,
       reviewRequired: false,
     };
